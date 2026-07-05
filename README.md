@@ -49,8 +49,10 @@ pip install -r requirements.txt
 
 `syn_flood.py` 는 예시 코드가 들어있는 파일입니다. 예시를 확인했다면 삭제해도 무관합니다.
 
-```bash
-def detect(packet, flow):
+```Python
+from engine import PacketData, Flow
+
+def detect(packet: PacketData, flow: Flow):
 
     print('syn_flood 모듈 실행중')
     print(packet.raw_packet)
@@ -65,7 +67,7 @@ def detect(packet, flow):
         )
 ```
 
-위와 같이 `detect(packet, flow)` 함수 내부에 자신의 탐지 코드를 삽입하여 저장하면 됩니다.
+위와 같이 `detect(packet: PacketData, flow: Flow):` 함수 내부에 자신의 탐지 코드를 삽입하여 저장하면 됩니다.
 
 `scapy`가 패킷 하나를 읽을 때마다 `detectors` 폴더 내부의 각 파일에 `detect` 함수가 있다면 이들을 호출합니다. (`engine\processor.py` 내용)
 
