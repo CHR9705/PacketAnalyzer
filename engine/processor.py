@@ -4,12 +4,15 @@ from engine.packet_data import PacketData
 
 from engine.flow_manager import FlowManager
 
+from engine.detector_loader import load_detectors
+
 
 class PacketProcessor:
 
     def __init__(self, packet_queue: Queue):
         self.packet_queue = packet_queue
         self.flow_manager = FlowManager()
+        self.detectors = load_detectors()
 
     def process_packet(self, packet):
 
@@ -66,15 +69,17 @@ class PacketProcessor:
             if packet_data is None:
                 continue
 
-            context = self.flow_manager.update(packet_data)
+            context = self.flow_manager.update(packet)
 
-            print(
-                context.packet.src_ip,
-                "->",
-                context.packet.dst_ip,
-                context.flow.packet_count
-            )
+            # print(
+            #     context.packet.src_ip,
+            #     "->",
+            #     context.packet.dst_ip,
+            #     context.flow.packet_count
+            # )
 
-            # SQLite 저장
+            packet = context.packet
+            flow = context.flow
 
-            # Detector 호출
+            for detect in self.detectors:
+                detect(packet, flow)
