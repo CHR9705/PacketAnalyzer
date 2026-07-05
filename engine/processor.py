@@ -1,10 +1,10 @@
 from queue import Queue
 from scapy.layers.inet import IP, TCP, UDP
-from engine.packet_data import PacketData
+from .packet_data import PacketData
 
-from engine.flow_manager import FlowManager
+from .flow_manager import FlowManager
 
-from engine.detector_loader import load_detectors
+from .detector_loader import load_detectors
 
 
 class PacketProcessor:
@@ -63,10 +63,10 @@ class PacketProcessor:
 
     def run(self):
         while True:
-            packet = self.packet_queue.get()
-            packet_data = self.process_packet(packet)
+            raw_packet = self.packet_queue.get()
+            packet = self.process_packet(raw_packet)
 
-            if packet_data is None:
+            if packet is None:
                 continue
 
             context = self.flow_manager.update(packet)
@@ -78,8 +78,7 @@ class PacketProcessor:
             #     context.flow.packet_count
             # )
 
-            packet = context.packet
-            flow = context.flow
-
             for detect in self.detectors:
-                detect(packet, flow)
+                detect(context.packet, context.flow)
+
+            
