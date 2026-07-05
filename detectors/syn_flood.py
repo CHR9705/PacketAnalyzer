@@ -1,6 +1,7 @@
 def detect(packet, flow):
 
     print('syn_flood 모듈 실행중')
+    print(packet.raw_packet)
     if flow.protocol != "TCP":
         return
 
