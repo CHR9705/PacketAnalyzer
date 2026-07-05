@@ -59,14 +59,22 @@ class PacketProcessor:
         )
 
     def run(self):
-
         while True:
-
             packet = self.packet_queue.get()
+            packet_data = self.process_packet(packet)
 
-            context = self.process_packet(packet)
-
-            if context is None:
+            if packet_data is None:
                 continue
 
-            print(f'{context.protocol} |  {context.src_ip} | {context.src_port} -> {context.dst_ip} | {context.dst_port}')
+            context = self.flow_manager.update(packet_data)
+
+            print(
+                context.packet.src_ip,
+                "->",
+                context.packet.dst_ip,
+                context.flow.packet_count
+            )
+
+            # SQLite 저장
+
+            # Detector 호출
