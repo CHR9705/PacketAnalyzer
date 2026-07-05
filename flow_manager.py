@@ -7,9 +7,8 @@ class FlowManager:
     def __init__(self):
         self.flows = {}
 
-    def update(self, packet):
-
-        key = (
+    def make_flow_key(self, packet):
+        return (
             packet.src_ip,
             packet.dst_ip,
             packet.src_port,
@@ -17,6 +16,9 @@ class FlowManager:
             packet.protocol
         )
 
+    def update(self, packet):
+
+        key = self.make_flow_key(packet)
         flow = self.flows.get(key)
 
         if flow is None:
