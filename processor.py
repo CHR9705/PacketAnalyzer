@@ -13,18 +13,21 @@ class PacketProcessor:
         if IP not in packet:
             return None
 
+        if TCP not in packet and UDP not in packet:
+            return None
+
         protocol = "OTHER"
         src_port = None
         dst_port = None
         tcp_flags = None
 
-        if TCP in packet:
+        if packet.haslayer(TCP):
             protocol = "TCP"
             src_port = packet[TCP].sport
             dst_port = packet[TCP].dport
             tcp_flags = str(packet[TCP].flags)
 
-        elif UDP in packet:
+        elif packet.haslayer(UDP):
             protocol = "UDP"
             src_port = packet[UDP].sport
             dst_port = packet[UDP].dport
@@ -63,4 +66,4 @@ class PacketProcessor:
             if context is None:
                 continue
 
-            print(context)
+            print(f'{context.protocol} |  {context.src_ip} | {context.src_port} -> {context.dst_ip} | {context.dst_port}')
