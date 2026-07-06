@@ -1,5 +1,7 @@
 from engine import PacketData, Flow
 
+# SYN, ACK, FIN 탐지
+
 def detect(packet: PacketData, flow: Flow):
 
     print('flood 모듈 실행중')
