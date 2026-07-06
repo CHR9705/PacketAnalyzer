@@ -5,6 +5,7 @@ from engine import PacketData, Flow
 def detect(packet: PacketData, flow: Flow):
 
     print('flood 모듈 실행중')
+    print(packet.raw_packet)
 
     if flow.protocol != "TCP":
         return
