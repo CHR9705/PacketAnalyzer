@@ -44,6 +44,17 @@ class AmplificationDetector:
         state["total_bytes"] += packet.packet_size
 
         # 오래된 패킷 제거
+        state = self.remove_old_packets(state, packet)
+
+        return AmplificationResult(
+            victim_ip=victim,
+            packet_count=len(state["events"]),
+            total_bytes=state["total_bytes"],
+            unique_servers=len(state["servers"]),
+            top_servers=state["servers"].most_common(5)
+        )
+    
+    def remove_old_packets(self, state, packet):
         while state["events"]:
 
             oldest = state["events"][0]
@@ -59,11 +70,4 @@ class AmplificationDetector:
                 del state["servers"][oldest.src_ip]
 
             state["total_bytes"] -= oldest.packet_size
-
-        return AmplificationResult(
-            victim_ip=victim,
-            packet_count=len(state["events"]),
-            total_bytes=state["total_bytes"],
-            unique_servers=len(state["servers"]),
-            top_servers=state["servers"].most_common(5)
-        )
+        return state
