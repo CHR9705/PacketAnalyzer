@@ -170,10 +170,10 @@ vscode 우측 상단의 **Run Python File** 버튼을 눌러도 됩니다.
 
 | **메서드명** | **반환 자료형** | **설명** | **사용 예** |
 | --- | --- | --- | --- |
-| duration | float | 이 Flow가 유지된 시간(초) | `flow.duration()` |
-| pps | float | 초당 패킷 수 | `flow.pps()` |
-| bps | float | 초당 Byte 수 | `flow.bps()` |
-| avg_packet_size | float | 평균 패킷 크기 (Byte) | `flow.avg_packet_size()` |
-| forward_ratio | float | endpoint1 → endpoint2 패킷의 비율 | `flow.forward_ratio()` |
-| backward_ratio | float | endpoint2 → endpoint1 패킷의 비율 | `flow.backward_ratio()` |
-| is_one_way | bool | 한쪽 방향으로만 통신하고 있는지 | `flow.is_one_way()` |
+| duration | float | 이 Flow가 유지된 시간(초) | `flow.duration` |
+| pps | float | 초당 패킷 수 | `flow.pps` |
+| bps | float | 초당 Byte 수 | `flow.bps` |
+| avg_packet_size | float | 평균 패킷 크기 (Byte) | `flow.avg_packet_size` |
+| forward_ratio | float | endpoint1 → endpoint2 패킷의 비율 | `flow.forward_ratio` |
+| backward_ratio | float | endpoint2 → endpoint1 패킷의 비율 | `flow.backward_ratio` |
+| is_one_way | bool | 한쪽 방향으로만 통신하고 있는지 | `flow.is_one_way` |
