@@ -59,9 +59,7 @@ class FlowManager:
         flow.recent_packets.append(packet)
 
         # 방향 판별
-        if (
-            packet.src_ip == flow.endpoint1_ip
-        ):
+        if packet.src_ip == flow.endpoint1_ip:
 
             flow.forward_packet_count += 1
             flow.forward_byte_count += packet.packet_size

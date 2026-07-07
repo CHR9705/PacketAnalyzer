@@ -101,10 +101,31 @@ class Flow:
             or self.backward_packet_count == 0
         )
     
-    @property
-    def get_dst_port_counter(self) -> Counter:
 
-        return Counter(
-            packet.dst_port
-            for packet in self.recent_packets
-        )
+    def get_dst_port_counter(self, src_ip) -> Counter:
+        """
+        특정 소스 IP에서 전송된 패킷들의 목적지 포트별 접근 횟수를 반환. recent_packets를 기반으로 계산하므로 최근 50개 패킷에서만 산정됨.
+        @param src_ip: 소스 IP 주소
+        @return: Counter 객체, 키: 목적지 포트, 값: 접근 횟수 counter[80]하면 80번 포트에 접근한 횟수 반환
+        """
+        counter = Counter()
+
+        for packet in self.recent_packets:
+            if packet.src_ip == src_ip:
+                counter[packet.dst_port] += 1
+
+        return counter
+    
+    def get_dst_unique_ports(self, src_ip) -> set:
+        """
+        특정 소스 IP에서 전송된 패킷들의 목적지 포트들의 종류를 반환. recent_packets를 기반으로 계산하므로 최근 50개 패킷에서만 산정됨.
+        @param src_ip: 소스 IP 주소
+        @return: 고유한 목적지 포트의 집합
+        """
+        unique_ports = set()
+
+        for packet in self.recent_packets:
+            if packet.src_ip == src_ip:
+                unique_ports.add(packet.dst_port)
+
+        return unique_ports
