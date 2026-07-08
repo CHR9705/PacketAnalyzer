@@ -15,3 +15,4 @@ def detect(packet: PacketData, flow: Flow):
             packet.src_ip
         )
         return True, "SYN Flood"
+    return False, None
