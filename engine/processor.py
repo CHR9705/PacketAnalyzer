@@ -5,6 +5,7 @@ from .packet_data import PacketData
 from .flow_manager import FlowManager
 
 from .detector_loader import load_detectors
+from .db.dbmodule import DBModule
 
 
 class PacketProcessor:
@@ -64,6 +65,7 @@ class PacketProcessor:
         )
 
     def run(self):
+        self.db_module = DBModule()
         while True:
             raw_packet = self.packet_queue.get()
             packet = self.process_packet(raw_packet)
@@ -72,13 +74,11 @@ class PacketProcessor:
                 continue
 
             context = self.flow_manager.update(packet)
-
-            # print(
-            #     context.packet.src_ip,
-            #     "->",
-            #     context.packet.dst_ip,
-            #     context.flow.packet_count
-            # )
+            self.db_module.insert_packet_table(
+                packet.timestamp, packet.src_ip, packet.dst_ip, 
+                packet.src_port, packet.dst_port, packet.protocol, 
+                packet.packet_size, packet.payload_size, packet.tcp_flags)
+            
 
             for detect in self.detectors:
                 detect(context.packet, context.flow)
