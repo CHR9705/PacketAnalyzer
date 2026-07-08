@@ -37,14 +37,6 @@ class Flow:
     # 최근 패킷
     recent_packets: deque = field(default_factory=lambda: deque(maxlen=50))
 
-        # 최근 목적지 포트
-    recent_dst_ports: deque = field(default_factory=lambda: deque(maxlen=50))
-
-    # 목적지 포트별 접근 횟수
-    dst_port_counter: Counter = field(default_factory=Counter)
-
-    # 출발지 포트별 사용 횟수
-    src_port_counter: Counter = field(default_factory=Counter)
 
     # ---------- 계산 속성 ----------
 
