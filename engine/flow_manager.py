@@ -1,3 +1,5 @@
+from time import time
+
 from engine.flow import Flow
 from engine.packet_context import PacketContext
 
@@ -96,3 +98,15 @@ class FlowManager:
             packet=packet,
             flow=flow
         )
+    
+    def remove_inactive_flows(self, current_time, timeout=30):
+        now = current_time
+
+        remove_keys = [
+            key
+            for key, flow in self.flows.items()
+            if now - flow.last_seen > timeout
+        ]
+
+        for key in remove_keys:
+            del self.flows[key]
