@@ -88,7 +88,14 @@ class PacketProcessor:
             
 
             for detect in self.detectors:
-                result, name = detect(context.packet, context.flow)
+               # result, name = detect(context.packet, context.flow)
+                raw_result = detect(context.packet, context.flow)
+
+                # 2. 결과가 None인 경우를 대비해 안전장치를 둡니다.
+                if raw_result is None:
+                    result, name = False, "Unknown"  
+                else:
+                    result, name = raw_result 
 
                 if result:
                     warning_manager.add_warning(
