@@ -1,3 +1,5 @@
+from engine import PacketData, Flow
+
 PORT_THRESHOLD = 10
 PPS_THRESHOLD = 20
 
@@ -6,11 +8,11 @@ def detect(packet: PacketData, flow: Flow):
 
     # TCP가 아니면 검사하지 않음
     if flow.protocol != "TCP":
-        return
+        return (False, "")
 
     # SYN 또는 FIN 패킷만 검사
     if packet.tcp_flags not in ("S", "F"):
-        return
+        return (False, "")
 
     # 최근 50개 패킷 기준으로 해당 출발지 IP가 접근한 목적지 포트
     unique_ports = flow.get_dst_unique_ports(packet.src_ip)
@@ -37,3 +39,5 @@ def detect(packet: PacketData, flow: Flow):
             f"{scan_type.lower()}={scan_count}",
             f"pps={flow.pps:.2f}"
         )
+        (True, f"{scan_type} Scan")
+    return (False, "")
