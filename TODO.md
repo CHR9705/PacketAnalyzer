@@ -31,6 +31,12 @@
 
 ## 약속
 - 작업 시작 전 develop 최신화(동기화)부터!
+    ```bash
+    # 동기화 방법
+    
+    git fetch upstream
+    git merge upstream/dev
+    ```
 - feature 브랜치는 항상 최신 develop에서 출발
 - develop 직접 커밋 금지, 모든 변경은 PR + 리뷰 1인 승인으로
 - main으로 가는 PR(develop → main)은 팀장만 연다
