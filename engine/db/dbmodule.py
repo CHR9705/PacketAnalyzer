@@ -48,7 +48,7 @@ class DBModule:
                 syn_count INTEGER,
                 ack_count INTEGER,
                 fin_count INTEGER,
-                rst_count INTEGER,
+                rst_count INTEGER
             );
         ''')
         self.cursor.execute("""
@@ -130,11 +130,6 @@ class DBModule:
             INSERT INTO flows (start_time, last_seen, endpoint1_ip, endpoint2_ip, packet_count, byte_count,
                           protocol, syn_count, ack_count, fin_count, rst_count)
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                            
-            ON CONFLICT(src_ip, attack_type)
-            DO UPDATE SET
-            counter = counter + excluded.counter,
-            last_timestamp = excluded.last_timestamp
         ''', (start_time, last_seen, endpoint1_ip, endpoint2_ip, packet_count, byte_count,
                           protocol, syn_count, ack_count, fin_count, rst_count))
         self.conn.commit()
