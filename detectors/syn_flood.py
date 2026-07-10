@@ -1,6 +1,6 @@
 from engine import PacketData, Flow
 from datetime import datetime
-from .conditions import conditions
+from .Flood_conditions import flood_conditions
 
 def detect(packet:  PacketData, flow: Flow):
     """
@@ -15,7 +15,7 @@ def detect(packet:  PacketData, flow: Flow):
 
     print(flow.packet_count)
     
-    condition= conditions(flow)
+    condition= flood_conditions(flow)
     
     if condition is None:
         return(False,"")

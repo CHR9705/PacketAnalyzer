@@ -1,13 +1,13 @@
 from engine import PacketData, Flow
 from datetime import datetime
-from .conditions import conditions
+from .Flood_conditions import flood_conditions
 
 def detect(packet:  PacketData, flow: Flow):
     """
     ACK Flood 공격을 받을 때 탐지
     """
 
-    condition= conditions (flow)
+    condition= flood_conditions (flow)
 
     if condition is None:
         return(False, "")

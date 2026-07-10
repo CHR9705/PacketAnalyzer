@@ -1,6 +1,6 @@
 from engine import Flow
 
-def conditions(flow: Flow):
+def flood_conditions(flow: Flow):
     """
     조건값
     """
