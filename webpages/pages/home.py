@@ -27,6 +27,7 @@ st.title("🛡 Packet Analyzer")
 
 now = int(datetime.now().timestamp())
 start = now - 60
+one_day_ago = int((datetime.now() - timedelta(days=1)).timestamp())
 
 packets = pd.read_sql_query("""
 SELECT *
@@ -41,11 +42,17 @@ ORDER BY last_timestamp DESC
 LIMIT 10
 """, conn)
 
+flows = pd.read_sql_query("""
+SELECT *
+FROM flows
+WHERE last_seen >= ?
+""", conn, params=(one_day_ago, ))
+
 ########################################################
 # KPI
 ########################################################
 
-col1, col2, col3, col4 = st.columns(4)
+col1, col2, col3, col4, col5 = st.columns(5)
 
 with col1:
     st.metric(
@@ -69,6 +76,14 @@ with col4:
     st.metric(
         "Active Source IP",
         packets["src_ip"].nunique()
+    )
+
+with col5:
+    max_flow = flows.loc[flows["packet_count"].idxmax()]
+    st.metric(
+        "24시간 내 최다 패킷 Flow",
+        f'{max_flow["endpoint1_ip"]} ↔\n {max_flow["endpoint2_ip"]}',
+        delta=f'{max_flow["packet_count"]} packets'
     )
 
 st.divider()
