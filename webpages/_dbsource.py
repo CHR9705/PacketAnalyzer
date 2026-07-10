@@ -22,3 +22,20 @@ def get_ip_list_from_db(db_path: str = DB_PATH, limit: int | None = None) -> lis
         return [row[0] for row in rows]
     finally:
         conn.close()
+
+def get_warnings_list_from_db(db_path: str = DB_PATH, limit: int | None = None) -> list[str]:
+    """warnings 테이블에서 IP 목록을 조회해 리스트로 반환.
+
+    """
+    conn = sqlite3.connect(db_path)
+    try:
+        cur = conn.cursor()
+        query = f"SELECT {IP_COLUMN} FROM warnings"
+        if limit:
+            query += f" LIMIT {limit}"
+        cur.execute(query)
+        rows = cur.fetchall()
+        return [row[0] for row in rows]
+    finally:
+        conn.close()
+
