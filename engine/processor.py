@@ -84,7 +84,7 @@ class PacketProcessor:
             context = self.flow_manager.update(packet)
 
             if time.time() - self.last_flow_cleanup >= 5:
-                self.flow_manager.remove_inactive_flows(current_time=packet.timestamp, timeout=30)
+                self.flow_manager.remove_inactive_flows(current_time=packet.timestamp, db=self.db_module)
                 self.last_flow_cleanup = time.time()
 
             self.db_module.insert_packet_table(
@@ -94,14 +94,12 @@ class PacketProcessor:
             
 
             for detect in self.detectors:
-               # result, name = detect(context.packet, context.flow)
                 raw_result = detect(context.packet, context.flow)
 
-                # 2. 결과가 None인 경우를 대비해 안전장치를 둡니다.
                 if raw_result is None:
-                    result, name = False, "Unknown"  
+                    result, name = False, "Unknown"
                 else:
-                    result, name = raw_result 
+                    result, name = raw_result
 
                 if result:
                     warning_manager.add_warning(

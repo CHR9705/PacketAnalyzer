@@ -12,6 +12,7 @@
 - [x] 저장소·dev 개설, 팀원 초대, 보호 규칙 — 팀장 RyunK
 - [x] 코드 골격 작성 — 팀장 RyunK
 - [x] amplification detection 개발 — 팀장 RyunK
+- [x] packets, warnings, flows를 DB에 저장 - 팀장 RyunK
 
 ## 코드 추가
 ### 탐지 코드
@@ -30,6 +31,12 @@
 
 ## 약속
 - 작업 시작 전 develop 최신화(동기화)부터!
+    ```bash
+    # 동기화 방법
+    
+    git fetch upstream
+    git merge upstream/dev
+    ```
 - feature 브랜치는 항상 최신 develop에서 출발
 - develop 직접 커밋 금지, 모든 변경은 PR + 리뷰 1인 승인으로
 - main으로 가는 PR(develop → main)은 팀장만 연다

@@ -99,7 +99,7 @@ class FlowManager:
             flow=flow
         )
     
-    def remove_inactive_flows(self, current_time, timeout=30):
+    def remove_inactive_flows(self, db, current_time, timeout=10):
         now = current_time
 
         remove_keys = [
@@ -109,4 +109,7 @@ class FlowManager:
         ]
 
         for key in remove_keys:
+            flow = self.flows[key]
+            db.insert_flow_table(flow.start_time, flow.last_seen, flow.endpoint1_ip, flow.endpoint2_ip, flow.packet_count, flow.byte_count,
+                          flow.protocol, flow.syn_count, flow.ack_count, flow.fin_count, flow.rst_count)
             del self.flows[key]
