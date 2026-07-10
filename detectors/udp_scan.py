@@ -1,29 +1,25 @@
 from engine import PacketData, Flow
-from collections import defaultdict
-
-scanned_ports = defaultdict(set)
 
 def detect(packet: PacketData, flow: Flow):
 
     if flow.protocol != "UDP":
-        return
-
-    key = (packet.src_ip, packet.dst_ip)
-    scanned_ports[key].add(packet.dst_port)
-
-    if flow.duration < 2:
-        return
-
-    port_count = len(scanned_ports[key])
+        return(False, "")
     
-    if port_count < 20:
-        return
+    recent_packets = flow.get_packets(seconds=10)
 
-    print(f"""
-    [UDP Scan]
-    공격 IP = {packet.src_ip}
-    스캔한 포트 수 = {port_count}
-    지속 시간 = {flow.duration:.2f}초
-    """)
+    if len(recent_packets) == 0:
+        return (False, "")
+    
+    ports = {pkt.dst_port for pkt in recent_packets}
 
-    scanned_ports[key].clear()
+    port_count = len(ports)
+    packet_count = len(recent_packets)
+    
+    if packet_count >= 50 and port_count >= 20:
+        print(f"""
+        [UDP Scan]
+        공격 IP = {packet.src_ip}
+        스캔한 포트 수 = {port_count}
+        지속 시간 = {flow.duration:.2f}초""")
+        return(True, "UDP Scan")
+    return(False,"")
