@@ -34,7 +34,7 @@ def load_geo_data() -> pd.DataFrame:
     index = get_index()
     ip_list = get_ip_list_from_db()
     warnings_list = get_warnings_list_from_db()
-    return lookup_ips(index, ip_list, warnings_list)
+    return lookup_ips(index, ip_list)
  
  
 st.title("IP 접속 위치 대시보드")
