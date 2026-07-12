@@ -7,7 +7,7 @@ def detect(packet:  PacketData, flow: Flow):
     SYN Flood 공격을 받을 때 탐지
     """
     
-    print(flow.packet_count)
+    # print(flow.packet_count)
     
     condition= flood_conditions(flow)
     

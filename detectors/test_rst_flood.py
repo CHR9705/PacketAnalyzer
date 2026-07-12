@@ -3,7 +3,7 @@ from engine import PacketData, Flow
 
 def detect(packet: PacketData, flow: Flow):
 
-    print('rst_flood 테스트중')
+    # print('rst_flood 테스트중')
     # 임계점 설정이라 변경가능.
     
     RST_THRESHOLD = 50

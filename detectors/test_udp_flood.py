@@ -2,7 +2,7 @@ from engine import PacketData, Flow
 
 def detect(packet: PacketData, flow: Flow):
 
-    print('udp_flood 모듈 실행중')
+    # print('udp_flood 모듈 실행중')
     if flow.protocol != "UDP":
         return
 
