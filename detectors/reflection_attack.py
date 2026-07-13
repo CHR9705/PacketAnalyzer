@@ -3,27 +3,26 @@
 #  UDP 트래픽을 대상으로 초당 패킷 수(PPS)와 응답 패킷 비율(Backward Ratio)을 함께 분석하여 
 #  비정상적인 대량 응답이 발생하는 경우 Reflection Attack으로 탐지하도록 구현했습니다.
 
+# UDP만 검사
+
 from engine import PacketData, Flow
 from datetime import datetime
 
 
 def detect(packet: PacketData, flow: Flow):
 
-    # Reflection Attack은 대부분 UDP 기반
+    # UDP만 검사
     if flow.protocol != "UDP":
-        return
+        return False, None
 
-    # 패킷이 너무 적으면 분석하지 않음
-    if flow.packet_count < 30:
-        return
+    # 최소 패킷 수
+    if flow.packet_count < 50:
+        return False, None
 
-    # 응답 패킷 비율
-    backward_ratio = flow.backward_ratio
-
-    # 탐지 조건
+    # Reflection Attack 탐지
     if (
-        flow.pps > 100
-        and backward_ratio > 0.8
+        flow.pps >= 100
+        and flow.backward_ratio >= 0.8
     ):
 
         print("\n" + "=" * 60)
@@ -41,12 +40,23 @@ def detect(packet: PacketData, flow: Flow):
         print(f"PPS          : {flow.pps:.2f}")
         print(f"Forward      : {flow.forward_packet_count}")
         print(f"Backward     : {flow.backward_packet_count}")
-        print(f"Backward %   : {backward_ratio:.2%}")
+        print(f"Backward %   : {flow.backward_ratio:.2%}")
 
         print("-" * 60)
 
         print("Threat Level : HIGH")
-        print("Attack Type  : UDP Reflection")
-        print("Reason       : Excessive UDP responses detected")
+        print("Attack Type  : UDP Reflection Attack")
+        print("Reason       : Excessive UDP response traffic")
 
         print("=" * 60)
+
+        return True, "UDP Reflection Attack"
+
+    return False, None
+
+
+
+
+
+# 터미너스 sudo tcpdump -i any udp port 9999
+# 우분투 sudo tcpdump -i any udp
