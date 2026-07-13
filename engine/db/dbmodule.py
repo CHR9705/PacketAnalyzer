@@ -11,6 +11,20 @@ class DBModule:
 
     def create_table(self):
         # 들어오는 패킷 전부 저장하는 테이블
+        self.create_packets()
+
+        # Flow 끝날 때마다 저장하는 테이블
+        self.create_flows()
+
+        # 경고 메시지만 저장하는 테이블
+        self.create_warnings()
+
+        # 블랙리스트, 화이트리스트 테이블
+        self.create_blackNwhites()
+
+        self.conn.commit()
+
+    def create_packets(self):
         self.cursor.execute('''
             CREATE TABLE IF NOT EXISTS packets (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -34,7 +48,8 @@ class DBModule:
         CREATE INDEX IF NOT EXISTS idx_packets_src_ip
         ON packets(src_ip)
         """)
-        # Flow 끝날 때마다 저장하는 테이블
+
+    def create_flows(self):
         self.cursor.execute('''
             CREATE TABLE IF NOT EXISTS flows (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -56,7 +71,7 @@ class DBModule:
         ON flows(id)
         """)
 
-        # 경고 메시지만 저장하는 테이블
+    def create_warnings(self):
         self.cursor.execute('''
             CREATE TABLE IF NOT EXISTS warnings (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -70,8 +85,25 @@ class DBModule:
                 UNIQUE(src_ip, attack_type)
             );
         ''')
-        self.conn.commit()
 
+    def create_blackNwhites(self):
+       self.cursor.execute('''
+            CREATE TABLE IF NOT EXISTS black_list (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                timestamp INTEGER,
+                ip TEXT,
+                accepted INTEGER DEFAULT 0
+            );
+        ''') 
+       
+       self.cursor.execute('''
+            CREATE TABLE IF NOT EXISTS white_list (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                timestamp INTEGER,
+                ip TEXT,
+                accepted INTEGER DEFAULT 0
+            );
+        ''') 
 
     def insert_packet_table(self, timestamp, src_ip, dst_ip, src_port, dst_port, protocol, packet_size, payload_size, tcp_flags):
         '''
@@ -134,7 +166,24 @@ class DBModule:
                           protocol, syn_count, ack_count, fin_count, rst_count))
         self.conn.commit()
 
+    def insert_white_list(self, ip):
+        self.cursor.execute('''
+            INSERT INTO white_list (timestamp, ip)
+            VALUES (?, ?)
+        ''', (time.time(), ip))
+
+    def insert_black_list(self, ip):
+        self.cursor.execute('''
+            INSERT INTO black_list (timestamp, ip)
+            VALUES (?, ?)
+        ''', (time.time(), ip))
+
+    
+
     def flush(self):
+        """
+        버퍼에 있는 패킷들을 전부 저장한다.
+        """
         if not self.packet_buffer:
             return
 
