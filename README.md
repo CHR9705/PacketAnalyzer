@@ -2,8 +2,9 @@
 ```plaintext
 최초 배포 : 엔진 토대 개발, Scapy 인터페이스
 db업데이트 : 패킷 데이터 및 경고 데이터 삽입하도록 업데이트함.
+pps 및 recent 패킷 등 최근 n초단위로 변경
 
-*recent* > pps 및 recent 패킷 등 최근 n초단위로 변경
+*recent* > db업데이트 : flow 데이터도 저장하도록 업데이트, 웹페이지 추가.
 ```
 
 ### Scapy 데이터 활용 가이드 링크 

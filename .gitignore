@@ -1,9 +1,14 @@
 # Created by https://www.toptal.com/developers/gitignore/api/python
 # Edit at https://www.toptal.com/developers/gitignore?templates=python
 
+### Imgs ###
+# 그림판 paint files
+*.paint
+
 ### SQLite ###
 # SQLite database files
 *.db
+*.db-journal
 
 ### Python ###
 # Byte-compiled / optimized / DLL files

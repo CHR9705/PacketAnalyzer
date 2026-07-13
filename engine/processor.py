@@ -76,15 +76,19 @@ class PacketProcessor:
         last_flush = time.time()
         while True:
             raw_packet = self.packet_queue.get()
+            
             packet = self.process_packet(raw_packet)
             
             if packet is None:
                 continue
 
+            if packet.dst_port == 22 or packet.src_port == 22:
+                return
+
             context = self.flow_manager.update(packet)
 
             if time.time() - self.last_flow_cleanup >= 5:
-                self.flow_manager.remove_inactive_flows(current_time=packet.timestamp, timeout=30)
+                self.flow_manager.remove_inactive_flows(current_time=packet.timestamp, db=self.db_module)
                 self.last_flow_cleanup = time.time()
 
             self.db_module.insert_packet_table(
@@ -94,7 +98,12 @@ class PacketProcessor:
             
 
             for detect in self.detectors:
-                result, name = detect(context.packet, context.flow)
+                raw_result = detect(context.packet, context.flow)
+
+                if raw_result is None:
+                    result, name = False, "Unknown"
+                else:
+                    result, name = raw_result
 
                 if result:
                     warning_manager.add_warning(

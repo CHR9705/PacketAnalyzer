@@ -34,6 +34,28 @@ class DBModule:
         CREATE INDEX IF NOT EXISTS idx_packets_src_ip
         ON packets(src_ip)
         """)
+        # Flow 끝날 때마다 저장하는 테이블
+        self.cursor.execute('''
+            CREATE TABLE IF NOT EXISTS flows (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                start_time INTEGER,
+                last_seen INTEGER,
+                endpoint1_ip TEXT,
+                endpoint2_ip TEXT,
+                packet_count INTEGER,
+                byte_count INTEGER,
+                protocol TEXT,
+                syn_count INTEGER,
+                ack_count INTEGER,
+                fin_count INTEGER,
+                rst_count INTEGER
+            );
+        ''')
+        self.cursor.execute("""
+        CREATE INDEX IF NOT EXISTS idx_flows_id
+        ON flows(id)
+        """)
+
         # 경고 메시지만 저장하는 테이블
         self.cursor.execute('''
             CREATE TABLE IF NOT EXISTS warnings (
@@ -100,6 +122,16 @@ class DBModule:
             counter = counter + excluded.counter,
             last_timestamp = excluded.last_timestamp
         ''', (timestamp, timestamp, src_ip, attack_type, counter))
+        self.conn.commit()
+
+    def insert_flow_table(self,start_time, last_seen, endpoint1_ip, endpoint2_ip, packet_count, byte_count,
+                          protocol, syn_count, ack_count, fin_count, rst_count  ):
+        self.cursor.execute('''
+            INSERT INTO flows (start_time, last_seen, endpoint1_ip, endpoint2_ip, packet_count, byte_count,
+                          protocol, syn_count, ack_count, fin_count, rst_count)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ''', (start_time, last_seen, endpoint1_ip, endpoint2_ip, packet_count, byte_count,
+                          protocol, syn_count, ack_count, fin_count, rst_count))
         self.conn.commit()
 
     def flush(self):
