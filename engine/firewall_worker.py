@@ -8,7 +8,6 @@ from engine.iptables import add_black, add_white, remove_black, remove_white
 class FirewallWorker():
 
     def __init__(self):
-        super().__init__(daemon=True)
         self.db = DBModule()
         self.running = True
 
