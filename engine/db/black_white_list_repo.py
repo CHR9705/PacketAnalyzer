@@ -36,30 +36,30 @@ class BlackWhiteRepo:
         ''', (time.time(), ip, 1 if accepted == True else 0))
     
     def get_pending_rules(self, table: str):
-        self.cursor.execute(f"""
+        self.db.cursor.execute(f"""
             SELECT id, ip
             FROM {table}
             WHERE accepted = 0
         """)
-        return self.cursor.fetchall()
+        return self.db.cursor.fetchall()
 
 
     def get_delete_rules(self, table: str):
-        self.cursor.execute(f"""
+        self.db.cursor.execute(f"""
             SELECT id, ip
             FROM {table}
             WHERE accepted = 2
         """)
-        return self.cursor.fetchall()
+        return self.db.cursor.fetchall()
 
 
     def accept_rule(self, table: str, rule_id: int):
-        self.cursor.execute(f"""
+        self.db.cursor.execute(f"""
             UPDATE {table}
             SET accepted = 1
             WHERE id = ?
         """, (rule_id,))
-        self.conn.commit()
+        self.db.conn.commit()
 
 
     def delete_rule(self, table: str, rule_id: int):
@@ -67,5 +67,5 @@ class BlackWhiteRepo:
             DELETE FROM {table}
             WHERE id = ?
         """, (rule_id,))
-        self.conn.commit()
+        self.db.conn.commit()
     
