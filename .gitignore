@@ -9,6 +9,7 @@
 # SQLite database files
 *.db
 *.db-journal
+*.db*
 
 ### Python ###
 # Byte-compiled / optimized / DLL files
