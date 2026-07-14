@@ -11,9 +11,6 @@ class WarningRepo:
                 src_ip TEXT,
                 attack_type TEXT,
                 counter INTEGER,
-                            
-            
-                UNIQUE(src_ip, attack_type)
             );
         ''')
     
