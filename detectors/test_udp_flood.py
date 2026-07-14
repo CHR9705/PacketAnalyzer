@@ -6,7 +6,7 @@ def detect(packet: PacketData, flow: Flow):
     if flow.protocol != "UDP":
         return
 
-    if flow.pps > 100 and flow.bps > 50:
+    if flow.pps > 300 and flow.bps > 200:
 
         print(
             "[UDP Flood]",

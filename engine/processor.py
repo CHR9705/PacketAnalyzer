@@ -83,21 +83,18 @@ class PacketProcessor:
                 continue
 
             if packet.dst_port == 22 or packet.src_port == 22:
-                continue
+                return
 
             context = self.flow_manager.update(packet)
 
             if time.time() - self.last_flow_cleanup >= 5:
                 self.flow_manager.remove_inactive_flows(current_time=packet.timestamp, db=self.db_module)
                 self.last_flow_cleanup = time.time()
-            
-            try: 
-                self.db_module.insert_packet_table(
-                    packet.timestamp, packet.src_ip, packet.dst_ip, 
-                    packet.src_port, packet.dst_port, packet.protocol, 
-                    packet.packet_size, packet.payload_size, packet.tcp_flags)
-            except Exception as e :
-                print(e)
+
+            self.db_module.insert_packet_table(
+                packet.timestamp, packet.src_ip, packet.dst_ip, 
+                packet.src_port, packet.dst_port, packet.protocol, 
+                packet.packet_size, packet.payload_size, packet.tcp_flags)
             
 
             for detect in self.detectors:
@@ -109,14 +106,11 @@ class PacketProcessor:
                     result, name = raw_result
 
                 if result:
-                    try: 
-                        warning_manager.add_warning(
-                            packet.timestamp,
-                            packet.src_ip,
-                            name
-                        )
-                    except Exception as e :
-                        print(e)
+                    warning_manager.add_warning(
+                        packet.timestamp,
+                        packet.src_ip,
+                        name
+                    )
 
                 if time.time() - last_flush >= 5:
                     warning_manager.flush(self.db_module)
