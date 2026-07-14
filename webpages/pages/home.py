@@ -234,7 +234,7 @@ with left:
     st.dataframe(
         top,
         hide_index=True,
-        use_container_width=True,
+        width='stretch',
         column_config={
             "Source IP": st.column_config.TextColumn(
                 "Source IP",
