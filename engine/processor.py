@@ -118,7 +118,7 @@ class PacketProcessor:
                     except Exception as e :
                         print(e)
 
-                if time.time() - last_flush >= 5:
+                if time.time() - last_flush >= 1:
                     warning_manager.flush(self.db_module)
                     last_flush = time.time()
 
