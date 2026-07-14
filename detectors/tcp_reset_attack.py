@@ -86,5 +86,5 @@ def detect(packet: PacketData, flow: Flow):
 
 
 
-# 터미너스 sudo hping3 -R -s 50000 -p 443 192.168.72.129 --fast --count 1000
-# 우분투 sudo tcpdump -i any tcp or sudo tcpdump -i any host 192.168.72.129
+# 터미너스(공격) sudo hping3 -R -p 80 192.168.72.129 --flood
+# 우분투(방어) sudo tcpdump -i any tcp or sudo tcpdump -i any host 192.168.72.129
