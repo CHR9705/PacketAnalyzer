@@ -1,7 +1,7 @@
 import os
 import sqlite3
 from datetime import datetime
-
+import time
 import altair as alt
 import pandas as pd
 import streamlit as st
@@ -114,21 +114,48 @@ def field_html(label, value):
     )
 
 
+def add_to_blacklist(ip: str, accepted: bool = False):
+    try:
+        conn = sqlite3.connect(DB_PATH, check_same_thread=False, isolation_level=None)
+        conn.execute("PRAGMA busy_timeout = 5000")
+        existing = conn.execute("SELECT accepted FROM black_list WHERE ip = ? LIMIT 1", (ip,)).fetchone()
+        if existing:
+            if existing[0] == 2:
+                return False, "차단해제로 등록된 IP입니다."
+            return False, "이미 블랙리스트에 등록된 IP입니다."
+        conn.execute(
+            "INSERT INTO black_list (timestamp, ip, accepted) VALUES (?, ?, ?)",
+            (time.time(), ip, 1 if accepted else 0),
+        )
+        return True, None
+    except Exception as e:
+        return False, str(e)
+
 @st.dialog("차단 확인")
 def confirm_block_dialog(row):
-    st.write(f"Src IP **{row['src_ip']}** 를 정말 차단하시겠습니까?")
+    ip = row['src_ip']
+
+    st.write(f"Src IP {ip} 를 정말 차단하시겠습니까?")
+
     col1, col2 = st.columns(2, gap="small")
     with col1:
         if st.button("차단", key="confirm_block", type="primary", width="stretch"):
-            if "blocked_ids" not in st.session_state:
-                st.session_state.blocked_ids = set()
-            st.session_state.blocked_ids.add(row["id"])
-            st.session_state.confirm_dialog_id = None
-            st.rerun()
+            success, err = add_to_blacklist(ip, accepted=True)
+            if success:
+                st.session_state.confirm_dialog_id = None
+                st.session_state.block_error = None
+                st.rerun()
+            else:
+                st.session_state.block_error = err  # 에러를 세션에 저장
+                st.rerun()  # 다시 그려도 에러가 세션에 남아있으므로 표시됨
     with col2:
         if st.button("취소", key="cancel_block", width="stretch"):
             st.session_state.confirm_dialog_id = None
+            st.session_state.block_error = None
             st.rerun()
+    if st.session_state.get("block_error"):
+        st.error(st.session_state.block_error)
+
 
 
 st.title("경고 목록")
