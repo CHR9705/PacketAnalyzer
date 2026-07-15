@@ -123,9 +123,11 @@ def confirm_block_dialog(row):
             if "blocked_ids" not in st.session_state:
                 st.session_state.blocked_ids = set()
             st.session_state.blocked_ids.add(row["id"])
+            st.session_state.confirm_dialog_id = None
             st.rerun()
     with col2:
         if st.button("취소", key="cancel_block", width="stretch"):
+            st.session_state.confirm_dialog_id = None
             st.rerun()
 
 
@@ -209,7 +211,7 @@ base = alt.Chart(chart_df).encode(
 )
 
 bars = base.mark_bar(
-    size=26, cornerRadiusTopLeft=4, cornerRadiusTopRight=4 ,
+    size=26, cornerRadiusTopLeft=4, cornerRadiusTopRight=4,
 ).encode(
     color=alt.Color(
         "Grade",
@@ -296,7 +298,12 @@ with col_detail:
         st.markdown("<div style='height:14px;'></div>", unsafe_allow_html=True)
 
         # 차단은 되돌릴 수 없는 액션이므로, 버튼을 누르면 팝업으로 한 번 더 확인받는다.
+        # 팝업 열림 여부를 session_state에 저장해두어야, 3초마다 도는 자동 새로고침으로
+        # 스크립트가 다시 실행되어도 팝업이 닫히지 않고 계속 떠 있는다.
         if st.button("차단하기", key="block_button", type="primary"):
+            st.session_state.confirm_dialog_id = selected_row["id"]
+
+        if st.session_state.get("confirm_dialog_id") == selected_row["id"]:
             confirm_block_dialog(selected_row)
 
         if selected_row["id"] in st.session_state.get("blocked_ids", set()):
