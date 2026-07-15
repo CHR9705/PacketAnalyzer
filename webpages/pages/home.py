@@ -1,7 +1,6 @@
 import sqlite3
 import pandas as pd
 import streamlit as st
-import streamlit.components.v1 as components
 import plotly.express as px
 from datetime import datetime, timedelta
 
@@ -12,6 +11,8 @@ from webpages.functions.titles  import get_h2
 from datetime import datetime, timezone, timedelta
 
 kst = timezone(timedelta(hours=9))
+
+from  webpages.css.st_header import _setting
 
 st_autorefresh(
     interval= 1 * 1000,   #1초마다 한번씩 새로고침
@@ -26,6 +27,7 @@ st.set_page_config(
 conn = sqlite3.connect("packets.db")
 # conn = sqlite3.connect(r"C:\Users\RyunK_IT\Documents\vscodeProject\vm_shared\packets.db")
 
+_setting()
 
 st.markdown("""
 <h1 style="
