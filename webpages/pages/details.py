@@ -1,1884 +1,2189 @@
-"""
-===========================================================
-Packet Analyzer
-details.py
+# ============================================================
+# Part 1-1
+# Import / Config / Constants
+# Packet Analyzer Dashboard
+# ============================================================
 
-SOC Dashboard
-===========================================================
-"""
+from __future__ import annotations
 
-############################################################
-# Import
-############################################################
-
+import os
+import sqlite3
 from pathlib import Path
 from datetime import datetime
-import sqlite3
 
 import pandas as pd
 import streamlit as st
+from streamlit_autorefresh import st_autorefresh
 
-from st_aggrid import AgGrid
-from st_aggrid.grid_options_builder import GridOptionsBuilder
-from st_aggrid.shared import GridUpdateMode
+import plotly.express as px
+import plotly.graph_objects as go
+import pydeck as pdk
 
-############################################################
-# Database
-############################################################
+from st_aggrid import (
+    AgGrid,
+    GridOptionsBuilder,
+    GridUpdateMode,
+    DataReturnMode,
+    JsCode
+)
 
-BASE_DIR = Path(__file__).resolve().parents[2]
+# ------------------------------------------------------------
+# Streamlit Config
+# ------------------------------------------------------------
+
+st.set_page_config(
+    page_title="Packet Analyzer Dashboard",
+    page_icon="🛡️",
+    layout="wide",
+    initial_sidebar_state="collapsed"
+)
+
+# ------------------------------------------------------------
+# Auto Refresh
+# ------------------------------------------------------------
+
+st_autorefresh(
+    interval=1000,
+    key="dashboard_refresh"
+)
+
+# ------------------------------------------------------------
+# Paths
+# ------------------------------------------------------------
+
+BASE_DIR = Path(__file__).resolve().parent
+
 DB_PATH = BASE_DIR / "packets.db"
 
-############################################################
-# Connection
-############################################################
+# ------------------------------------------------------------
+# Layout
+# ------------------------------------------------------------
 
-@st.cache_resource
-def get_connection():
+PAGE_WIDTH = 1920
+PAGE_HEIGHT = 1080
 
-    return sqlite3.connect(
-        DB_PATH,
-        check_same_thread=False
-    )
+HEADER_HEIGHT = 70
+KPI_HEIGHT = 105
+GRID_HEIGHT = 355
+DETAIL_HEIGHT = 250
+CHART_HEIGHT = 330
 
-conn = get_connection()
+# ------------------------------------------------------------
+# Grid
+# ------------------------------------------------------------
 
-############################################################
-# Query
-############################################################
+GRID_THEME = "streamlit"
 
-@st.cache_data(ttl=1)
-def load_packets():
+GRID_SELECTION = "single"
 
-    sql = """
-    SELECT *
-    FROM packets
-    ORDER BY id DESC
+DEFAULT_PAGE_SIZE = 100
+
+# ------------------------------------------------------------
+# Database
+# ------------------------------------------------------------
+
+PACKET_TABLE = "packets"
+
+FLOW_TABLE = "flows"
+
+WARNING_TABLE = "warnings"
+
+SQLITE_TIMEOUT = 10
+
+# ------------------------------------------------------------
+# Dashboard Colors
+# ------------------------------------------------------------
+
+PRIMARY = "#2563EB"
+SUCCESS = "#16A34A"
+WARNING = "#F59E0B"
+DANGER = "#DC2626"
+
+TEXT = "#111827"
+SUBTEXT = "#6B7280"
+
+CARD = "#FFFFFF"
+BACKGROUND = "#F4F7FB"
+
+BORDER = "#E5E7EB"
+
+# ------------------------------------------------------------
+# Protocol Color
+# ------------------------------------------------------------
+
+PROTOCOL_COLOR = {
+    "TCP": "#2563EB",
+    "UDP": "#10B981",
+    "ICMP": "#F59E0B",
+    "ARP": "#8B5CF6"
+}
+
+# ------------------------------------------------------------
+# TCP Flag Color
+# ------------------------------------------------------------
+
+FLAG_COLOR = {
+    "SYN": "#2563EB",
+    "ACK": "#16A34A",
+    "FIN": "#F97316",
+    "RST": "#DC2626",
+    "PSH": "#7C3AED",
+    "URG": "#EC4899"
+}
+
+# ------------------------------------------------------------
+# World Map Default
+# ------------------------------------------------------------
+
+DEFAULT_LAT = 20.0
+DEFAULT_LON = 0.0
+DEFAULT_ZOOM = 1.2
+DEFAULT_PITCH = 0
+
+# ------------------------------------------------------------
+# AgGrid JS
+# ------------------------------------------------------------
+
+ROW_STYLE = JsCode(
     """
-
-    return pd.read_sql_query(sql, conn)
-
-
-@st.cache_data(ttl=1)
-def load_flows():
-
-    sql = """
-    SELECT *
-    FROM flows
-    ORDER BY id DESC
+    function(params){
+        return {
+            'fontSize':'13px',
+            'fontFamily':'Segoe UI',
+            'borderBottom':'1px solid #ECECEC'
+        }
+    }
     """
+)
 
-    return pd.read_sql_query(sql, conn)
-
-
-@st.cache_data(ttl=1)
-def load_warnings():
-
-    sql = """
-    SELECT *
-    FROM warnings
-    ORDER BY last_timestamp DESC
+CELL_CENTER = JsCode(
     """
+    function(params){
+        return {
+            'display':'flex',
+            'alignItems':'center'
+        }
+    }
+    """
+)
 
-    return pd.read_sql_query(sql, conn)
+# ------------------------------------------------------------
+# DataFrame Columns
+# ------------------------------------------------------------
 
-############################################################
-# Load
-############################################################
+PACKET_COLUMNS = [
+    "id",
+    "timestamp",
+    "src_ip",
+    "dst_ip",
+    "src_port",
+    "dst_port",
+    "protocol",
+    "packet_size",
+    "payload_size",
+    "tcp_flags"
+]
 
-packet_df = load_packets()
-flow_df = load_flows()
-warning_df = load_warnings()
+FLOW_COLUMNS = [
+    "flow_id",
+    "src_ip",
+    "dst_ip",
+    "src_port",
+    "dst_port",
+    "protocol",
+    "packet_count",
+    "byte_count",
+    "duration",
+    "pps"
+]
 
-############################################################
-# Time Format
-############################################################
+WARNING_COLUMNS = [
+    "id",
+    "timestamp",
+    "level",
+    "attack_type",
+    "src_ip",
+    "dst_ip",
+    "description"
+]
 
-def convert_time(timestamp):
+# ------------------------------------------------------------
+# Session State
+# ------------------------------------------------------------
 
-    try:
+if "selected_packet" not in st.session_state:
+    st.session_state.selected_packet = None
 
-        return datetime.fromtimestamp(
-            int(timestamp)
-        ).strftime("%Y-%m-%d %H:%M:%S")
+if "selected_flow" not in st.session_state:
+    st.session_state.selected_flow = None
 
-    except:
+if "selected_warning" not in st.session_state:
+    st.session_state.selected_warning = None
 
-        return "-"
-
-############################################################
-# Timestamp Convert
-############################################################
-
-if not packet_df.empty:
-
-    packet_df["timestamp"] = packet_df[
-        "timestamp"
-    ].apply(convert_time)
-
-if not flow_df.empty:
-
-    flow_df["start_time"] = flow_df[
-        "start_time"
-    ].apply(convert_time)
-
-    flow_df["last_seen"] = flow_df[
-        "last_seen"
-    ].apply(convert_time)
-
-if not warning_df.empty:
-
-    warning_df["first_timestamp"] = warning_df[
-        "first_timestamp"
-    ].apply(convert_time)
-
-    warning_df["last_timestamp"] = warning_df[
-        "last_timestamp"
-    ].apply(convert_time)
-
-############################################################
-# CSS
-############################################################
+# ============================================================
+# Part 1-2
+# CSS (Microsoft Defender + Fluent UI Style)
+# ============================================================
 
 st.markdown(
-"""
+    """
 <style>
 
-body{
+/* ==========================================================
+   Global
+========================================================== */
 
-background:#F4F6F9;
-
+html, body, [class*="css"]{
+    font-family: "Segoe UI","Malgun Gothic",sans-serif;
+    background:#F4F7FB;
+    color:#1F2937;
 }
 
-.main{
-
-background:#F4F6F9;
-
-}
+/* Streamlit */
 
 .block-container{
+    max-width:100%;
+    padding-top:12px;
+    padding-left:18px;
+    padding-right:18px;
+    padding-bottom:12px;
+}
 
-padding-top:1rem;
+section.main>div{
+    padding-top:0rem;
+}
 
-padding-left:2rem;
+/* Hide Streamlit */
 
-padding-right:2rem;
+#MainMenu{
+    visibility:hidden;
+}
+
+footer{
+    visibility:hidden;
+}
+
+header{
+    visibility:hidden;
+}
+
+/* ==========================================================
+   Header
+========================================================== */
+
+.dashboard-header{
+
+    background:white;
+
+    border:1px solid #E5E7EB;
+
+    border-radius:14px;
+
+    padding:18px 26px;
+
+    margin-bottom:14px;
+
+    display:flex;
+
+    justify-content:space-between;
+
+    align-items:center;
+
+    box-shadow:0 2px 8px rgba(0,0,0,.04);
 
 }
 
-div[data-testid="stMetric"]{
+.header-title{
 
-background:white;
+    font-size:28px;
 
-border-radius:12px;
+    font-weight:700;
 
-padding:18px;
-
-border:1px solid #DCE3EA;
-
-box-shadow:0px 2px 6px rgba(0,0,0,.08);
+    color:#1E3A8A;
 
 }
 
-h1,h2,h3{
+.header-sub{
 
-color:#1F2937;
+    font-size:13px;
+
+    color:#6B7280;
+
+    margin-top:4px;
+
+}
+
+.header-right{
+
+    text-align:right;
+
+}
+
+.header-clock{
+
+    font-size:22px;
+
+    font-weight:700;
+
+}
+
+.header-date{
+
+    font-size:13px;
+
+    color:#6B7280;
+
+}
+
+/* ==========================================================
+   KPI
+========================================================== */
+
+.kpi-card{
+
+    background:white;
+
+    border-radius:14px;
+
+    border:1px solid #E5E7EB;
+
+    padding:18px;
+
+    transition:.2s;
+
+    height:112px;
+
+    box-shadow:0 1px 4px rgba(0,0,0,.04);
+
+}
+
+.kpi-card:hover{
+
+    transform:translateY(-2px);
+
+    box-shadow:0 6px 16px rgba(0,0,0,.08);
+
+}
+
+.kpi-title{
+
+    font-size:13px;
+
+    color:#6B7280;
+
+    margin-bottom:10px;
+
+    font-weight:600;
+
+}
+
+.kpi-value{
+
+    font-size:31px;
+
+    font-weight:700;
+
+    color:#111827;
+
+}
+
+.kpi-footer{
+
+    margin-top:8px;
+
+    font-size:12px;
+
+    color:#9CA3AF;
+
+}
+
+/* ==========================================================
+   Toolbar
+========================================================== */
+
+.toolbar{
+
+    background:white;
+
+    border-radius:14px;
+
+    border:1px solid #E5E7EB;
+
+    padding:14px 18px;
+
+    margin-top:14px;
+
+    margin-bottom:14px;
+
+    box-shadow:0 1px 4px rgba(0,0,0,.04);
+
+}
+
+/* ==========================================================
+   Panel
+========================================================== */
+
+.panel{
+
+    background:white;
+
+    border-radius:14px;
+
+    border:1px solid #E5E7EB;
+
+    padding:14px;
+
+    margin-bottom:14px;
+
+    box-shadow:0 1px 4px rgba(0,0,0,.04);
+
+}
+
+.panel-title{
+
+    font-size:18px;
+
+    font-weight:700;
+
+    color:#1F2937;
+
+    margin-bottom:10px;
+
+}
+
+/* ==========================================================
+   Detail
+========================================================== */
+
+.detail-box{
+
+    background:#FAFBFC;
+
+    border:1px solid #E5E7EB;
+
+    border-radius:10px;
+
+    padding:12px;
+
+    min-height:180px;
+
+}
+
+.detail-title{
+
+    font-size:17px;
+
+    font-weight:700;
+
+    margin-bottom:12px;
+
+    color:#2563EB;
+
+}
+
+.detail-row{
+
+    display:flex;
+
+    justify-content:space-between;
+
+    border-bottom:1px solid #F3F4F6;
+
+    padding:7px 0;
+
+    font-size:13px;
+
+}
+
+.detail-key{
+
+    color:#6B7280;
+
+    font-weight:600;
+
+}
+
+.detail-value{
+
+    color:#111827;
+
+    font-weight:500;
+
+}
+
+/* ==========================================================
+   Chart
+========================================================== */
+
+.chart-card{
+
+    background:white;
+
+    border-radius:14px;
+
+    border:1px solid #E5E7EB;
+
+    padding:12px;
+
+    box-shadow:0 1px 4px rgba(0,0,0,.04);
+
+}
+
+/* ==========================================================
+   Status Badge
+========================================================== */
+
+.badge{
+
+    display:inline-block;
+
+    padding:3px 10px;
+
+    border-radius:30px;
+
+    font-size:12px;
+
+    font-weight:600;
+
+    color:white;
+
+}
+
+.badge-green{
+
+    background:#16A34A;
+
+}
+
+.badge-red{
+
+    background:#DC2626;
+
+}
+
+.badge-blue{
+
+    background:#2563EB;
+
+}
+
+.badge-orange{
+
+    background:#F59E0B;
+
+}
+
+.badge-purple{
+
+    background:#7C3AED;
+
+}
+
+/* ==========================================================
+   Footer
+========================================================== */
+
+.footer{
+
+    margin-top:10px;
+
+    padding:12px;
+
+    text-align:center;
+
+    color:#6B7280;
+
+    font-size:12px;
+
+}
+
+/* ==========================================================
+   AgGrid
+========================================================== */
+
+.ag-theme-streamlit{
+
+    --ag-font-size:13px;
+
+    --ag-font-family:Segoe UI;
+
+    --ag-row-height:36px;
+
+    --ag-header-height:38px;
+
+    --ag-border-color:#E5E7EB;
+
+    --ag-header-background-color:#F8FAFC;
+
+    --ag-background-color:#FFFFFF;
+
+    --ag-odd-row-background-color:#FCFCFD;
+
+    --ag-row-hover-color:#EEF6FF;
+
+    --ag-selected-row-background-color:#DBEAFE;
+
+    --ag-header-foreground-color:#374151;
+
+    --ag-foreground-color:#111827;
+
+}
+
+/* ==========================================================
+   Scroll
+========================================================== */
+
+::-webkit-scrollbar{
+
+    width:10px;
+
+    height:10px;
+
+}
+
+::-webkit-scrollbar-thumb{
+
+    background:#CBD5E1;
+
+    border-radius:10px;
+
+}
+
+::-webkit-scrollbar-track{
+
+    background:#F8FAFC;
 
 }
 
 </style>
 """,
-unsafe_allow_html=True
+    unsafe_allow_html=True,
 )
 
-############################################################
-# Title
-############################################################
+# ============================================================
+# Part 1-3A
+# SQLite(DB)
+# ============================================================
 
-st.title("🛡 Packet Analyzer")
+@st.cache_resource(show_spinner=False)
+def get_connection() -> sqlite3.Connection:
+    """
+    SQLite Connection
+    """
 
-st.caption(
-"Security Operation Center Dashboard"
-)
+    conn = sqlite3.connect(
+        DB_PATH,
+        check_same_thread=False,
+        timeout=SQLITE_TIMEOUT
+    )
 
-############################################################
+    conn.row_factory = sqlite3.Row
+
+    conn.execute("PRAGMA journal_mode=WAL;")
+    conn.execute("PRAGMA synchronous=NORMAL;")
+    conn.execute("PRAGMA temp_store=MEMORY;")
+    conn.execute("PRAGMA cache_size=-100000;")
+    conn.execute("PRAGMA foreign_keys=ON;")
+
+    return conn
+
+
+CONN = get_connection()
+
+
+# ============================================================
+# Query
+# ============================================================
+
+def query_dataframe(sql: str, params: tuple = ()) -> pd.DataFrame:
+    """
+    SQL → DataFrame
+    """
+
+    try:
+
+        return pd.read_sql_query(
+            sql,
+            CONN,
+            params=params
+        )
+
+    except Exception:
+
+        return pd.DataFrame()
+
+
+# ============================================================
+# Packet
+# ============================================================
+
+@st.cache_data(ttl=1, show_spinner=False)
+def load_packets(limit: int = 1000) -> pd.DataFrame:
+
+    sql = f"""
+        SELECT
+            id,
+            timestamp,
+            src_ip,
+            dst_ip,
+            src_port,
+            dst_port,
+            protocol,
+            packet_size,
+            payload_size,
+            tcp_flags
+        FROM {PACKET_TABLE}
+        ORDER BY id DESC
+        LIMIT ?
+    """
+
+    return query_dataframe(sql, (limit,))
+
+
+# ============================================================
+# Flow
+# ============================================================
+
+@st.cache_data(ttl=1, show_spinner=False)
+def load_flows(limit: int = 1000) -> pd.DataFrame:
+
+    sql = f"""
+        SELECT
+            flow_id,
+            src_ip,
+            dst_ip,
+            src_port,
+            dst_port,
+            protocol,
+            packet_count,
+            byte_count,
+            duration,
+            pps
+        FROM {FLOW_TABLE}
+        ORDER BY flow_id DESC
+        LIMIT ?
+    """
+
+    return query_dataframe(sql, (limit,))
+
+
+# ============================================================
+# Warning
+# ============================================================
+
+@st.cache_data(ttl=1, show_spinner=False)
+def load_warnings(limit: int = 300) -> pd.DataFrame:
+
+    sql = f"""
+        SELECT
+            id,
+            timestamp,
+            level,
+            attack_type,
+            src_ip,
+            dst_ip,
+            description
+        FROM {WARNING_TABLE}
+        ORDER BY id DESC
+        LIMIT ?
+    """
+
+    return query_dataframe(sql, (limit,))
+
+
+# ============================================================
+# Summary
+# ============================================================
+
+@st.cache_data(ttl=1, show_spinner=False)
+def load_summary() -> dict:
+
+    summary = {
+        "packet_count": 0,
+        "flow_count": 0,
+        "warning_count": 0,
+        "tcp_count": 0,
+        "udp_count": 0,
+    }
+
+    try:
+
+        summary["packet_count"] = CONN.execute(
+            f"SELECT COUNT(*) FROM {PACKET_TABLE}"
+        ).fetchone()[0]
+
+        summary["flow_count"] = CONN.execute(
+            f"SELECT COUNT(*) FROM {FLOW_TABLE}"
+        ).fetchone()[0]
+
+        summary["warning_count"] = CONN.execute(
+            f"SELECT COUNT(*) FROM {WARNING_TABLE}"
+        ).fetchone()[0]
+
+        summary["tcp_count"] = CONN.execute(
+            f"SELECT COUNT(*) FROM {PACKET_TABLE} WHERE protocol='TCP'"
+        ).fetchone()[0]
+
+        summary["udp_count"] = CONN.execute(
+            f"SELECT COUNT(*) FROM {PACKET_TABLE} WHERE protocol='UDP'"
+        ).fetchone()[0]
+
+    except Exception:
+        pass
+
+    return summary
+
+
+# ============================================================
+# Initial Load
+# ============================================================
+
+packet_df = load_packets()
+
+flow_df = load_flows()
+
+warning_df = load_warnings()
+
+summary = load_summary()
+
+# ============================================================
+# Part 1-3B
+# Utility Functions
+# ============================================================
+
+def safe_int(value, default=0):
+    """
+    None -> 0
+    """
+
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return default
+
+
+def safe_float(value, default=0.0):
+    """
+    None -> 0.0
+    """
+
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return default
+
+
+def safe_str(value, default="-"):
+    """
+    None -> "-"
+    """
+
+    if value is None:
+        return default
+
+    text = str(value).strip()
+
+    return text if text else default
+
+
+def format_timestamp(value):
+    """
+    Unix Timestamp -> YYYY-MM-DD HH:MM:SS
+    """
+
+    if value is None:
+        return "-"
+
+    try:
+
+        value = float(value)
+
+        if value > 1_000_000_000_000:
+            value /= 1000
+
+        return datetime.fromtimestamp(value).strftime(
+            "%Y-%m-%d %H:%M:%S"
+        )
+
+    except Exception:
+        return str(value)
+
+
+def format_number(value):
+    """
+    1000000 -> 1,000,000
+    """
+
+    try:
+        return f"{int(value):,}"
+    except Exception:
+        return "0"
+
+
+def format_bytes(size):
+
+    try:
+        size = float(size)
+    except Exception:
+        return "0 B"
+
+    units = ["B", "KB", "MB", "GB", "TB"]
+
+    index = 0
+
+    while size >= 1024 and index < len(units) - 1:
+        size /= 1024
+        index += 1
+
+    return f"{size:.2f} {units[index]}"
+
+
+def protocol_badge(protocol):
+
+    protocol = safe_str(protocol).upper()
+
+    color = PROTOCOL_COLOR.get(protocol, "#6B7280")
+
+    return (
+        f"<span class='badge' "
+        f"style='background:{color};'>"
+        f"{protocol}"
+        f"</span>"
+    )
+
+
+def flag_badge(flag):
+
+    if not flag:
+        return "-"
+
+    html = []
+
+    for item in str(flag).replace(",", " ").split():
+
+        key = item.upper()
+
+        color = FLAG_COLOR.get(key, "#6B7280")
+
+        html.append(
+            f"<span class='badge' "
+            f"style='background:{color};margin-right:4px;'>"
+            f"{key}"
+            f"</span>"
+        )
+
+    return "".join(html)
+
+
+def make_detail_dataframe(data: dict) -> pd.DataFrame:
+
+    rows = []
+
+    for key, value in data.items():
+
+        rows.append(
+            {
+                "Field": key,
+                "Value": safe_str(value)
+            }
+        )
+
+    return pd.DataFrame(rows)
+
+
+def get_protocol_count(df: pd.DataFrame, protocol: str) -> int:
+
+    if df.empty:
+        return 0
+
+    if "protocol" not in df.columns:
+        return 0
+
+    return int(
+        (df["protocol"] == protocol).sum()
+    )
+
+
+def get_unique_ip_count(df: pd.DataFrame) -> int:
+
+    if df.empty:
+        return 0
+
+    ips = set()
+
+    if "src_ip" in df.columns:
+        ips.update(df["src_ip"].dropna().tolist())
+
+    if "dst_ip" in df.columns:
+        ips.update(df["dst_ip"].dropna().tolist())
+
+    return len(ips)
+
+
+def get_latest_timestamp(df: pd.DataFrame):
+
+    if df.empty:
+        return "-"
+
+    if "timestamp" not in df.columns:
+        return "-"
+
+    return format_timestamp(df.iloc[0]["timestamp"])
+
+
+def dataframe_to_csv(df: pd.DataFrame):
+
+    if df.empty:
+        return b""
+
+    return df.to_csv(
+        index=False,
+        encoding="utf-8-sig"
+    ).encode("utf-8-sig")
+
+
+def empty_dataframe(columns):
+
+    return pd.DataFrame(columns=columns)
+
+
+def refresh_data():
+
+    return {
+        "packet": load_packets(),
+        "flow": load_flows(),
+        "warning": load_warnings(),
+        "summary": load_summary()
+    }
+
+
+# ============================================================
+# Refresh
+# ============================================================
+
+data = refresh_data()
+
+packet_df = data["packet"]
+
+flow_df = data["flow"]
+
+warning_df = data["warning"]
+
+summary = data["summary"]
+
+# ============================================================
+# Part 1-4
+# Header, KPI
+# ============================================================
+
+# ------------------------------------------------------------
+# Current Time
+# ------------------------------------------------------------
+
+current_time = datetime.now()
+
+current_date = current_time.strftime("%Y-%m-%d")
+
+current_clock = current_time.strftime("%H:%M:%S")
+
+# ------------------------------------------------------------
+# KPI Value
+# ------------------------------------------------------------
+
+total_packets = safe_int(summary.get("packet_count"))
+
+total_flows = safe_int(summary.get("flow_count"))
+
+total_warnings = safe_int(summary.get("warning_count"))
+
+tcp_packets = safe_int(summary.get("tcp_count"))
+
+udp_packets = safe_int(summary.get("udp_count"))
+
+unique_ips = get_unique_ip_count(packet_df)
+
+latest_packet = get_latest_timestamp(packet_df)
+
+# ------------------------------------------------------------
+# Header
+# ------------------------------------------------------------
+
+header_left, header_right = st.columns([5, 1])
+
+with header_left:
+    st.title("🛡️ Packet Analyzer Dashboard")
+    st.caption("Real-Time Network Traffic Monitoring")
+
+with header_right:
+    st.markdown("### " + current_clock)
+    st.caption(current_date)
+
+st.markdown("---")
+
+# ------------------------------------------------------------
 # KPI
-############################################################
+# ------------------------------------------------------------
 
-packet_count = len(packet_df)
-flow_count = len(flow_df)
-warning_count = len(warning_df)
+kpi1, kpi2, kpi3, kpi4, kpi5, kpi6 = st.columns(6)
 
-if packet_df.empty:
+with kpi1:
 
-    protocol_count = 0
-    avg_packet = 0
+    st.markdown(
+        f"""
+<div class="kpi-card">
 
-else:
+<div class="kpi-title">
+Total Packets
+</div>
 
-    protocol_count = packet_df[
-        "protocol"
-    ].nunique()
+<div class="kpi-value">
+{format_number(total_packets)}
+</div>
 
-    avg_packet = int(
-        packet_df[
-            "packet_size"
-        ].mean()
+<div class="kpi-footer">
+Captured Packets
+</div>
+
+</div>
+""",
+        unsafe_allow_html=True
     )
 
-col1,col2,col3,col4,col5 = st.columns(5)
+with kpi2:
 
-col1.metric(
-    "Packets",
-    packet_count
-)
+    st.markdown(
+        f"""
+<div class="kpi-card">
 
-col2.metric(
-    "Flows",
-    flow_count
-)
+<div class="kpi-title">
+Active Flows
+</div>
 
-col3.metric(
-    "Warnings",
-    warning_count
-)
+<div class="kpi-value">
+{format_number(total_flows)}
+</div>
 
-col4.metric(
-    "Protocols",
-    protocol_count
-)
+<div class="kpi-footer">
+Network Flows
+</div>
 
-col5.metric(
-    "Avg Packet",
-    f"{avg_packet} B"
-)
-
-st.divider()
-
-############################################################
-# Sidebar
-############################################################
-
-st.sidebar.title("Filter")
-
-############################################################
-# Search
-############################################################
-
-search_keyword = st.sidebar.text_input(
-    "Search"
-)
-
-############################################################
-# Protocol
-############################################################
-
-protocols = ["ALL"]
-
-if not packet_df.empty:
-
-    protocols += sorted(
-        packet_df["protocol"]
-        .dropna()
-        .unique()
-        .tolist()
+</div>
+""",
+        unsafe_allow_html=True
     )
 
-selected_protocol = st.sidebar.selectbox(
+with kpi3:
 
-    "Protocol",
+    st.markdown(
+        f"""
+<div class="kpi-card">
 
-    protocols
+<div class="kpi-title">
+Warnings
+</div>
 
+<div class="kpi-value" style="color:#DC2626;">
+{format_number(total_warnings)}
+</div>
+
+<div class="kpi-footer">
+Detected Events
+</div>
+
+</div>
+""",
+        unsafe_allow_html=True
+    )
+
+with kpi4:
+
+    st.markdown(
+        f"""
+<div class="kpi-card">
+
+<div class="kpi-title">
+TCP Packets
+</div>
+
+<div class="kpi-value" style="color:#2563EB;">
+{format_number(tcp_packets)}
+</div>
+
+<div class="kpi-footer">
+Protocol : TCP
+</div>
+
+</div>
+""",
+        unsafe_allow_html=True
+    )
+
+with kpi5:
+
+    st.markdown(
+        f"""
+<div class="kpi-card">
+
+<div class="kpi-title">
+UDP Packets
+</div>
+
+<div class="kpi-value" style="color:#16A34A;">
+{format_number(udp_packets)}
+</div>
+
+<div class="kpi-footer">
+Protocol : UDP
+</div>
+
+</div>
+""",
+        unsafe_allow_html=True
+    )
+
+with kpi6:
+
+    st.markdown(
+        f"""
+<div class="kpi-card">
+
+<div class="kpi-title">
+Unique IP
+</div>
+
+<div class="kpi-value">
+{format_number(unique_ips)}
+</div>
+
+<div class="kpi-footer">
+Last Packet : {latest_packet}
+</div>
+
+</div>
+""",
+        unsafe_allow_html=True
+    )
+
+st.markdown("<div style='height:12px;'></div>", unsafe_allow_html=True)
+
+# ============================================================
+# Part 2-1
+# Search Toolbar
+# ============================================================
+
+st.markdown(
+    """
+<div class="panel">
+
+<div class="panel-title">
+🔎 Search & Filter
+</div>
+
+</div>
+""",
+    unsafe_allow_html=True
 )
 
-############################################################
-# TCP Flag
-############################################################
-
-flags = ["ALL"]
-
-if not packet_df.empty:
-
-    flags += sorted(
-
-        packet_df["tcp_flags"]
-
-        .fillna("")
-
-        .unique()
-
-        .tolist()
-
-    )
-
-selected_flag = st.sidebar.selectbox(
-
-    "TCP Flag",
-
-    flags
-
+toolbar_col1, toolbar_col2, toolbar_col3, toolbar_col4, toolbar_col5, toolbar_col6 = st.columns(
+    [2.5, 1.1, 1.1, 1.0, 1.0, 0.8]
 )
 
-############################################################
-# IP
-############################################################
+with toolbar_col1:
 
-ip_filter = st.sidebar.text_input(
-
-    "IP Address"
-
-)
-
-############################################################
-# Packet Size
-############################################################
-
-if packet_df.empty:
-
-    min_size = 0
-    max_size = 1
-
-else:
-
-    min_size = int(
-        packet_df["packet_size"].min()
+    search_keyword = st.text_input(
+        "Search",
+        placeholder="IP / Port / Protocol / TCP Flag ...",
+        label_visibility="collapsed"
     )
 
-    max_size = int(
-        packet_df["packet_size"].max()
+with toolbar_col2:
+
+    protocol_filter = st.selectbox(
+        "Protocol",
+        [
+            "ALL",
+            "TCP",
+            "UDP",
+            "ICMP",
+            "ARP"
+        ]
     )
 
-packet_range = st.sidebar.slider(
+with toolbar_col3:
 
-    "Packet Size",
-
-    min_size,
-
-    max_size,
-
-    (min_size,max_size)
-
-)
-
-############################################################
-# Packet Filter
-############################################################
-
-filtered_packet = packet_df.copy()
-
-if selected_protocol != "ALL":
-
-    filtered_packet = filtered_packet[
-
-        filtered_packet["protocol"]
-
-        ==
-
-        selected_protocol
-
-    ]
-
-if selected_flag != "ALL":
-
-    filtered_packet = filtered_packet[
-
-        filtered_packet["tcp_flags"]
-
-        ==
-
-        selected_flag
-
-    ]
-
-if ip_filter:
-
-    filtered_packet = filtered_packet[
-
-        filtered_packet["src_ip"]
-
-        .str.contains(
-            ip_filter,
-            case=False,
-            na=False
-        )
-
-        |
-
-        filtered_packet["dst_ip"]
-
-        .str.contains(
-            ip_filter,
-            case=False,
-            na=False
-        )
-
-    ]
-
-filtered_packet = filtered_packet[
-
-    (filtered_packet["packet_size"]>=packet_range[0])
-
-    &
-
-    (filtered_packet["packet_size"]<=packet_range[1])
-
-]
-
-if search_keyword:
-
-    mask = filtered_packet.astype(str).apply(
-
-        lambda col:
-
-        col.str.contains(
-
-            search_keyword,
-
-            case=False,
-
-            na=False
-
-        )
-
+    flag_filter = st.selectbox(
+        "TCP Flag",
+        [
+            "ALL",
+            "SYN",
+            "ACK",
+            "FIN",
+            "RST",
+            "PSH",
+            "URG"
+        ]
     )
 
-    filtered_packet = filtered_packet[
+with toolbar_col4:
 
-        mask.any(axis=1)
-
-    ]
-
-############################################################
-# Packet Section
-############################################################
-
-packet_col, detail_col = st.columns(
-    [3, 2],
-    gap="small"
-)
-
-############################################################
-# LEFT : Packet Grid
-############################################################
-
-with packet_col:
-
-    st.subheader("📦 Packet Monitor")
-
-    gb = GridOptionsBuilder.from_dataframe(filtered_packet)
-
-    gb.configure_default_column(
-        editable=False,
-        sortable=True,
-        filter=True,
-        resizable=True
+    min_packet_size = st.number_input(
+        "Min Size",
+        min_value=0,
+        value=0,
+        step=1
     )
 
-    gb.configure_selection(
-        selection_mode="single",
-        use_checkbox=True
+with toolbar_col5:
+
+    max_packet_size = st.number_input(
+        "Max Size",
+        min_value=0,
+        value=65535,
+        step=100
     )
 
-    gb.configure_pagination(
-        enabled=True,
-        paginationPageSize=10
+with toolbar_col6:
+
+    st.markdown(
+        "<div style='height:27px;'></div>",
+        unsafe_allow_html=True
     )
 
-    ########################################################
-
-    gb.configure_column("id", width=70)
-
-    gb.configure_column("timestamp", width=170)
-
-    gb.configure_column("src_ip", width=140)
-
-    gb.configure_column("dst_ip", width=140)
-
-    gb.configure_column("protocol", width=80)
-
-    gb.configure_column("packet_size", width=90)
-
-    gb.configure_column("tcp_flags", width=100)
-
-    ########################################################
-
-    packet_grid = AgGrid(
-
-        filtered_packet,
-
-        gridOptions=gb.build(),
-
-        theme="streamlit",
-
-        height=260,
-
-        reload_data=True,
-
-        update_mode=GridUpdateMode.SELECTION_CHANGED
-
-    )
-
-    ########################################################
-
-    packet_csv = filtered_packet.to_csv(
-        index=False
-    ).encode("utf-8")
+    csv_packet = dataframe_to_csv(packet_df)
 
     st.download_button(
-
-        "⬇ Packet CSV",
-
-        packet_csv,
-
-        "packets.csv",
-
-        "text/csv"
-
+        "📥 CSV",
+        data=csv_packet,
+        file_name="packets.csv",
+        mime="text/csv",
+        use_container_width=True
     )
 
-############################################################
-# RIGHT : Packet Detail
-############################################################
+st.markdown("<br>", unsafe_allow_html=True)
+
+# ============================================================
+# Part 2-2
+# SQLite Query + Filter
+# ============================================================
+
+def apply_packet_filter(
+    packet_df: pd.DataFrame,
+    keyword: str,
+    protocol: str,
+    tcp_flag: str,
+    min_size: int,
+    max_size: int,
+) -> pd.DataFrame:
+    """
+    Packet DataFrame Filter
+    """
+
+    if packet_df.empty:
+        return packet_df.copy()
+
+    df = packet_df.copy()
+
+    # --------------------------------------------------------
+    # Packet Size
+    # --------------------------------------------------------
+
+    if "packet_size" in df.columns:
+
+        df = df[
+            (df["packet_size"] >= min_size)
+            &
+            (df["packet_size"] <= max_size)
+        ]
+
+    # --------------------------------------------------------
+    # Protocol
+    # --------------------------------------------------------
+
+    if (
+        protocol != "ALL"
+        and "protocol" in df.columns
+    ):
+
+        df = df[
+            df["protocol"].astype(str).str.upper() == protocol
+        ]
+
+    # --------------------------------------------------------
+    # TCP Flag
+    # --------------------------------------------------------
+
+    if (
+        tcp_flag != "ALL"
+        and "tcp_flags" in df.columns
+    ):
+
+        df = df[
+            df["tcp_flags"]
+            .fillna("")
+            .astype(str)
+            .str.upper()
+            .str.contains(
+                tcp_flag,
+                case=False,
+                regex=False
+            )
+        ]
+
+    # --------------------------------------------------------
+    # Keyword Search
+    # --------------------------------------------------------
+
+    keyword = keyword.strip()
+
+    if keyword:
+
+        keyword = keyword.lower()
+
+        search_columns = [
+            "src_ip",
+            "dst_ip",
+            "src_port",
+            "dst_port",
+            "protocol",
+            "tcp_flags"
+        ]
+
+        mask = pd.Series(
+            False,
+            index=df.index
+        )
+
+        for column in search_columns:
+
+            if column not in df.columns:
+                continue
+
+            mask |= (
+                df[column]
+                .fillna("")
+                .astype(str)
+                .str.lower()
+                .str.contains(
+                    keyword,
+                    regex=False
+                )
+            )
+
+        df = df[mask]
+
+    # --------------------------------------------------------
+    # Timestamp Format
+    # --------------------------------------------------------
+
+    if "timestamp" in df.columns:
+
+        df["timestamp"] = (
+            df["timestamp"]
+            .apply(format_timestamp)
+        )
+
+    # --------------------------------------------------------
+    # Sort
+    # --------------------------------------------------------
+
+    if "id" in df.columns:
+
+        df = df.sort_values(
+            by="id",
+            ascending=False
+        )
+
+    return df.reset_index(drop=True)
+
+
+# ============================================================
+# Flow Filter
+# ============================================================
+
+def apply_flow_filter(
+    flow_df: pd.DataFrame,
+    keyword: str,
+    protocol: str,
+) -> pd.DataFrame:
+
+    if flow_df.empty:
+        return flow_df.copy()
+
+    df = flow_df.copy()
+
+    # --------------------------------------------------------
+    # Protocol
+    # --------------------------------------------------------
+
+    if (
+        protocol != "ALL"
+        and "protocol" in df.columns
+    ):
+
+        df = df[
+            df["protocol"]
+            .astype(str)
+            .str.upper()
+            == protocol
+        ]
+
+    # --------------------------------------------------------
+    # Keyword
+    # --------------------------------------------------------
+
+    keyword = keyword.strip()
+
+    if keyword:
+
+        keyword = keyword.lower()
+
+        mask = pd.Series(
+            False,
+            index=df.index
+        )
+
+        columns = [
+            "src_ip",
+            "dst_ip",
+            "src_port",
+            "dst_port",
+            "protocol"
+        ]
+
+        for column in columns:
+
+            if column not in df.columns:
+                continue
+
+            mask |= (
+                df[column]
+                .fillna("")
+                .astype(str)
+                .str.lower()
+                .str.contains(
+                    keyword,
+                    regex=False
+                )
+            )
+
+        df = df[mask]
+
+    if "flow_id" in df.columns:
+
+        df = df.sort_values(
+            by="flow_id",
+            ascending=False
+        )
+
+    return df.reset_index(drop=True)
+
+
+# ============================================================
+# Apply Filter
+# ============================================================
+
+packet_view = apply_packet_filter(
+    packet_df=packet_df,
+    keyword=search_keyword,
+    protocol=protocol_filter,
+    tcp_flag=flag_filter,
+    min_size=min_packet_size,
+    max_size=max_packet_size,
+)
+
+flow_view = apply_flow_filter(
+    flow_df=flow_df,
+    keyword=search_keyword,
+    protocol=protocol_filter,
+)
+
+warning_view = warning_df.copy()
+
+# ============================================================
+# Result Count
+# ============================================================
+
+st.caption(
+    f"""
+Packets : {len(packet_view):,} |
+Flows : {len(flow_view):,} |
+Warnings : {len(warning_view):,}
+"""
+)
+
+# ============================================================
+# Part 3-1
+# Packet Grid (AgGrid)
+# ============================================================
+
+monitor_col, detail_col = st.columns(
+    [2.3, 1],
+    gap="medium"
+)
+
+with monitor_col:
+
+    st.markdown("### 📡 Traffic Monitor")
+
+    monitor_type = st.radio(
+        "",
+        ["📦 Packet", "🔄 Flow"],
+        horizontal=True,
+        label_visibility="collapsed",
+    )
+
+    if monitor_type == "📦 Packet":
+
+        current_df = packet_view
+
+    else:
+
+        current_df = flow_view
+
+    packet_gb = GridOptionsBuilder.from_dataframe(
+    current_df)
+
+    packet_gb.configure_default_column(
+        sortable=True,
+        filter=True,
+        resizable=True,
+        editable=False,
+        floatingFilter=False,
+    )
+
+    packet_gb.configure_selection(
+        selection_mode="single",
+        use_checkbox=False,
+        pre_selected_rows=[],
+    )
+
+    packet_gb.configure_grid_options(
+        rowHeight=34,
+        headerHeight=38,
+        animateRows=True,
+        suppressRowClickSelection=False,
+        rowSelection="single",
+        enableCellTextSelection=True,
+        ensureDomOrder=True,
+    )
+    
+    packet_gb.configure_column(
+        "id",
+        header_name="ID",
+        width=70,
+        type=["numericColumn"],
+    )
+
+    packet_gb.configure_column(
+        "timestamp",
+        header_name="Timestamp",
+        width=180,
+    )
+
+    packet_gb.configure_column(
+        "src_ip",
+        header_name="Source IP",
+        width=150,
+    )
+
+    packet_gb.configure_column(
+        "dst_ip",
+        header_name="Destination IP",
+        width=150,
+    )
+
+    packet_gb.configure_column(
+        "src_port",
+        header_name="Src Port",
+        width=95,
+        type=["numericColumn"],
+    )
+
+    packet_gb.configure_column(
+        "dst_port",
+        header_name="Dst Port",
+        width=95,
+        type=["numericColumn"],
+    )
+
+    packet_gb.configure_column(
+        "protocol",
+        header_name="Protocol",
+        width=90,
+    )
+
+    packet_gb.configure_column(
+        "packet_size",
+        header_name="Size",
+        width=90,
+        type=["numericColumn"],
+    )
+
+    packet_gb.configure_column(
+        "payload_size",
+        header_name="Payload",
+        width=95,
+        type=["numericColumn"],
+    )
+
+    packet_gb.configure_column(
+        "tcp_flags",
+        header_name="TCP Flags",
+        width=110,
+    )
+
+    packet_grid = AgGrid(
+        current_df,
+        key="packet_grid",
+        gridOptions=packet_gb.build(),
+        theme=GRID_THEME,
+        allow_unsafe_jscode=True,
+        height=GRID_HEIGHT,
+        fit_columns_on_grid_load=False,
+        data_return_mode=DataReturnMode.AS_INPUT,
+        update_mode=GridUpdateMode.SELECTION_CHANGED,
+        reload_data=True,
+    )
+
+    selected = None
+
+    if packet_grid["selected_rows"]:
+
+        selected = packet_grid["selected_rows"][0]
+
+        st.session_state.selected_row = selected
+
+    elif "selected_row" in st.session_state:
+
+        selected = st.session_state.selected_row
+
+
+# ============================================================
+# Part 5
+# Unified Detail Panel
+# ============================================================
 
 with detail_col:
 
-    st.subheader("📄 Packet Detail")
+    st.markdown("### 🔍 Detail")
 
-    selected_rows = packet_grid.selected_rows
+st.markdown("<br>", unsafe_allow_html=True)
 
-    row = None
+st.markdown(
+    """
+<div class="panel">
 
-    if selected_rows is not None:
+<div class="panel-title">
+📋 Unified Detail Panel
+</div>
 
-        if isinstance(selected_rows, pd.DataFrame):
+</div>
+""",
+    unsafe_allow_html=True,
+)
 
-            if not selected_rows.empty:
-                row = selected_rows.iloc[0]
+# ============================================================
+# Packet / Flow Detail
+# ============================================================
 
-        elif isinstance(selected_rows, list):
+with detail_col:
 
-            if len(selected_rows):
-                row = selected_rows[0]
+    st.markdown("### 🔍 Detail")
 
-    ########################################################
+    if selected is None:
 
-    if row is None:
-
-        st.info("Packet을 선택하세요.")
+        st.info("Packet 또는 Flow를 선택하세요.")
 
     else:
 
-        ####################################################
-        # KPI
-        ####################################################
-
-        c1, c2, c3 = st.columns(3)
-
-        with c1:
-            st.metric("Protocol", row["protocol"])
-
-        with c2:
-            st.metric("Size", f"{row['packet_size']} B")
-
-        with c3:
-            st.metric("Payload", f"{row['payload_size']} B")
-
-        st.divider()
-
-        ####################################################
-        # Network
-        ####################################################
-
-        st.markdown("### 🌐 Network")
-
-        st.text_input(
-            "Source IP",
-            value=row["src_ip"],
-            disabled=True
-        )
-
-        st.text_input(
-            "Destination IP",
-            value=row["dst_ip"],
-            disabled=True
-        )
-
-        st.text_input(
-            "Timestamp",
-            value=str(row["timestamp"]),
-            disabled=True
-        )
-
-        st.divider()
-
-        ####################################################
-        # Transport
-        ####################################################
-
-        st.markdown("### 🚀 Transport")
-
-        col1, col2 = st.columns(2)
-
-        with col1:
-
-            st.text_input(
-                "Source Port",
-                value=str(row["src_port"]),
-                disabled=True
-            )
-
-            st.text_input(
-                "Protocol",
-                value=row["protocol"],
-                disabled=True
-            )
-
-        with col2:
-
-            st.text_input(
-                "Destination Port",
-                value=str(row["dst_port"]),
-                disabled=True
-            )
-
-            st.text_input(
-                "TCP Flag",
-                value=str(row["tcp_flags"]),
-                disabled=True
-            )
-
-    st.divider()
-
-    ####################################################
-    # Transport
-    ####################################################
-
-    st.markdown("### 🚀 Transport")
-
-    col1, col2 = st.columns(2)
-
-    with col1:
-
-        st.text_input(
-            "Source Port",
-            value=str(row["src_port"]),
-            disabled=True
-        )
-
-        st.text_input(
-            "Protocol",
-            value=row["protocol"],
-            disabled=True
-        )
-
-    with col2:
-
-        st.text_input(
-            "Destination Port",
-            value=str(row["dst_port"]),
-            disabled=True
-        )
-
-        st.text_input(
-            "TCP Flag",
-            value=str(row["tcp_flags"]),
-            disabled=True
-        )
-
-############################################################
-# Warning Section
-############################################################
-
-st.divider()
-
-st.subheader("🚨 Warning Monitor")
-
-############################################################
-# Warning Search
-############################################################
-
-warning_keyword = st.text_input(
-
-    "🔍 Search Warning",
-
-    key="warning_search"
-
-)
-
-filtered_warning = warning_df.copy()
-
-############################################################
-# Warning Search Filter
-############################################################
-
-if warning_keyword:
-
-    mask = filtered_warning.astype(str).apply(
-
-        lambda col: col.str.contains(
-
-            warning_keyword,
-
-            case=False,
-
-            na=False
-
-        )
-
-    )
-
-    filtered_warning = filtered_warning[
-
-        mask.any(axis=1)
-
-    ]
-
-############################################################
-# Severity
-############################################################
-
-def get_severity(counter):
-
-    if counter >= 100:
-
-        return "Critical"
-
-    elif counter >= 50:
-
-        return "High"
-
-    elif counter >= 20:
-
-        return "Medium"
-
-    else:
-
-        return "Low"
-
-############################################################
-# Add Severity Column
-############################################################
-
-if not filtered_warning.empty:
-
-    filtered_warning["severity"] = filtered_warning[
-
-        "counter"
-
-    ].apply(get_severity)
-
-############################################################
-# Warning KPI
-############################################################
-
-critical = 0
-high = 0
-medium = 0
-low = 0
-
-if not filtered_warning.empty:
-
-    critical = len(
-        filtered_warning[
-            filtered_warning["severity"]=="Critical"
-        ]
-    )
-
-    high = len(
-        filtered_warning[
-            filtered_warning["severity"]=="High"
-        ]
-    )
-
-    medium = len(
-        filtered_warning[
-            filtered_warning["severity"]=="Medium"
-        ]
-    )
-
-    low = len(
-        filtered_warning[
-            filtered_warning["severity"]=="Low"
-        ]
-    )
-
-c1,c2,c3,c4 = st.columns(4)
-
-c1.metric(
-    "🔴 Critical",
-    critical
-)
-
-c2.metric(
-    "🟠 High",
-    high
-)
-
-c3.metric(
-    "🟡 Medium",
-    medium
-)
-
-c4.metric(
-    "🟢 Low",
-    low
-)
-
-############################################################
-# Warning Grid
-############################################################
-
-gb = GridOptionsBuilder.from_dataframe(filtered_warning)
-
-gb.configure_default_column(
-
-    sortable=True,
-
-    filter=True,
-
-    resizable=True
-
-)
-
-gb.configure_selection(
-
-    selection_mode="single",
-
-    use_checkbox=True
-
-)
-
-gb.configure_pagination(
-
-    enabled=True,
-
-    paginationPageSize=15
-
-)
-
-gb.configure_column(
-
-    "counter",
-
-    header_name="Detected",
-
-    width=100
-
-)
-
-gb.configure_column(
-
-    "severity",
-
-    width=110
-
-)
-
-warning_grid = AgGrid(
-
-    filtered_warning,
-
-    gridOptions=gb.build(),
-
-    height=350,
-
-    width="100%",
-
-    reload_data=True,
-
-    theme="streamlit",
-
-    update_mode=GridUpdateMode.SELECTION_CHANGED
-
-)
-
-############################################################
-# Warning CSV
-############################################################
-
-warning_csv = filtered_warning.to_csv(
-
-    index=False
-
-).encode("utf-8")
-
-st.download_button(
-
-    "⬇ Warning CSV",
-
-    warning_csv,
-
-    "warnings.csv",
-
-    "text/csv"
-
-)
-
-############################################################
-# Warning Detail
-############################################################
-
-selected_warning = warning_grid.selected_rows
-
-st.divider()
-
-st.subheader("🚨 Warning Detail")
-
-row = None
-
-if selected_warning is not None:
-
-    if isinstance(selected_warning, pd.DataFrame):
-
-        if not selected_warning.empty:
-
-            row = selected_warning.iloc[0]
-
-    elif isinstance(selected_warning, list):
-
-        if len(selected_warning):
-
-            row = selected_warning[0]
-
-if row is not None:
-
-    left, right = st.columns(2)
-
-    with left:
-
-        st.write("### Attack")
-
-        st.write(f"**Attack Type** : {row['attack_type']}")
-        st.write(f"**Source IP** : {row['src_ip']}")
-        st.write(f"**Detected Count** : {row['counter']}")
-        st.write(f"**Severity** : {row['severity']}")
-
-    with right:
-
-        st.write("### Detection Time")
-
-        st.write(f"**First Detection** : {row['first_timestamp']}")
-        st.write(f"**Last Detection** : {row['last_timestamp']}")
-
-else:
-
-    st.info("Warning을 선택하세요.")
-
-############################################################
-# Flow Section
-############################################################
-
-st.divider()
-
-st.subheader("🌐 Flow Monitor")
-
-############################################################
-# Flow Search
-############################################################
-
-flow_keyword = st.text_input(
-
-    "🔍 Search Flow",
-
-    key="flow_search"
-
-)
-
-filtered_flow = flow_df.copy()
-
-############################################################
-# Flow Search Filter
-############################################################
-
-if flow_keyword:
-
-    mask = filtered_flow.astype(str).apply(
-
-        lambda col: col.str.contains(
-
-            flow_keyword,
-
-            case=False,
-
-            na=False
-
-        )
-
-    )
-
-    filtered_flow = filtered_flow[
-
-        mask.any(axis=1)
-
-    ]
-
-############################################################
-# Flow KPI
-############################################################
-
-total_packets = 0
-total_bytes = 0
-
-if not filtered_flow.empty:
-
-    total_packets = int(
-        filtered_flow["packet_count"].sum()
-    )
-
-    total_bytes = int(
-        filtered_flow["byte_count"].sum()
-    )
-
-avg_packets = 0
-avg_bytes = 0
-
-if not filtered_flow.empty:
-
-    avg_packets = int(
-        filtered_flow["packet_count"].mean()
-    )
-
-    avg_bytes = int(
-        filtered_flow["byte_count"].mean()
-    )
-
-k1, k2, k3, k4 = st.columns(4)
-
-k1.metric(
-
-    "Flows",
-
-    len(filtered_flow)
-
-)
-
-k2.metric(
-
-    "Packets",
-
-    total_packets
-
-)
-
-k3.metric(
-
-    "Traffic",
-
-    f"{total_bytes:,} B"
-
-)
-
-k4.metric(
-
-    "Avg Flow",
-
-    avg_packets
-
-)
-
-############################################################
-# Flow Grid
-############################################################
-
-gb = GridOptionsBuilder.from_dataframe(
-    filtered_flow
-)
-
-gb.configure_default_column(
-
-    sortable=True,
-
-    filter=True,
-
-    resizable=True
-
-)
-
-gb.configure_selection(
-
-    selection_mode="single",
-
-    use_checkbox=True
-
-)
-
-gb.configure_pagination(
-
-    enabled=True,
-
-    paginationPageSize=20
-
-)
-
-gb.configure_column(
-
-    "id",
-
-    width=70
-
-)
-
-gb.configure_column(
-
-    "endpoint1_ip",
-
-    header_name="Endpoint A",
-
-    width=160
-
-)
-
-gb.configure_column(
-
-    "endpoint2_ip",
-
-    header_name="Endpoint B",
-
-    width=160
-
-)
-
-gb.configure_column(
-
-    "packet_count",
-
-    width=110
-
-)
-
-gb.configure_column(
-
-    "byte_count",
-
-    width=120
-
-)
-
-gb.configure_column(
-
-    "protocol",
-
-    width=90
-
-)
-
-flow_grid = AgGrid(
-
-    filtered_flow,
-
-    gridOptions=gb.build(),
-
-    height=430,
-
-    theme="streamlit",
-
-    reload_data=True,
-
-    update_mode=GridUpdateMode.SELECTION_CHANGED,
-
-    fit_columns_on_grid_load=False
-
-)
-
-############################################################
-# Flow CSV
-############################################################
-
-flow_csv = filtered_flow.to_csv(
-
-    index=False
-
-).encode("utf-8")
-
-st.download_button(
-
-    "⬇ Flow CSV",
-
-    flow_csv,
-
-    "flows.csv",
-
-    "text/csv"
-
-)
-
-############################################################
-# Flow Detail
-############################################################
-
-selected_flow = flow_grid.selected_rows
-
-st.divider()
-
-st.subheader("🌐 Flow Detail")
-
-row = None
-
-if selected_flow is not None:
-
-    if isinstance(selected_flow, pd.DataFrame):
-
-        if not selected_flow.empty:
-
-            row = selected_flow.iloc[0]
-
-    elif isinstance(selected_flow, list):
-
-        if len(selected_flow):
-
-            row = selected_flow[0]
-
-if row is not None:
-
-    left, right = st.columns(2)
-
-    ########################################################
-    # Endpoint
-    ########################################################
-
-    with left:
-
-        st.markdown("### Endpoint")
-
-        st.write(f"**Flow ID** : {row['id']}")
-        st.write(f"**Endpoint A** : {row['endpoint1_ip']}")
-        st.write(f"**Endpoint B** : {row['endpoint2_ip']}")
-        st.write(f"**Protocol** : {row['protocol']}")
-        st.write(f"**Start Time** : {row['start_time']}")
-        st.write(f"**Last Seen** : {row['last_seen']}")
-
-    ########################################################
-    # Statistics
-    ########################################################
-
-    with right:
-
-        st.markdown("### Statistics")
-
-        st.write(f"**Packet Count** : {row['packet_count']}")
-        st.write(f"**Byte Count** : {row['byte_count']}")
-        st.write(f"**SYN** : {row['syn_count']}")
-        st.write(f"**ACK** : {row['ack_count']}")
-        st.write(f"**FIN** : {row['fin_count']}")
-        st.write(f"**RST** : {row['rst_count']}")
-
-    ########################################################
-    # Summary
-    ########################################################
-
-    m1, m2, m3, m4 = st.columns(4)
-
-    m1.metric("Packets", row["packet_count"])
-    m2.metric("Bytes", row["byte_count"])
-    m3.metric("SYN", row["syn_count"])
-    m4.metric("ACK", row["ack_count"])
-
-else:
-
-    st.info("Flow를 선택하세요.")
-
-############################################################
-# Dashboard Summary
-############################################################
-
-st.divider()
-
-st.subheader("📊 Dashboard Summary")
-
-summary_col1, summary_col2 = st.columns(2)
-
-############################################################
-# Protocol Statistics
-############################################################
-
-with summary_col1:
-
-    st.markdown("### 📡 Protocol Distribution")
-
-    if packet_df.empty:
-
-        st.info("Packet 데이터가 없습니다.")
-
-    else:
-
-        protocol_chart = (
-            packet_df["protocol"]
-            .value_counts()
-            .rename_axis("Protocol")
-            .reset_index(name="Count")
-        )
-
-        st.bar_chart(
-            protocol_chart.set_index("Protocol")
-        )
-
-############################################################
-# Attack Statistics
-############################################################
-
-with summary_col2:
-
-    st.markdown("### 🚨 Attack Statistics")
-
-    if warning_df.empty:
-
-        st.info("Warning 데이터가 없습니다.")
-
-    else:
-
-        attack_chart = (
-            warning_df.groupby("attack_type")["counter"]
-            .sum()
-            .sort_values(ascending=False)
-        )
-
-        st.bar_chart(
-            attack_chart
-        )
-
-############################################################
-# Top Source IP
-############################################################
-
-st.divider()
-
-st.subheader("🌍 Top Source IP")
-
-if packet_df.empty:
-
-    st.info("Packet 데이터가 없습니다.")
-
-else:
-
-    top_src = (
-
-        packet_df["src_ip"]
-
-        .value_counts()
-
-        .head(10)
-
-    )
-
-    st.bar_chart(top_src)
-
-############################################################
-# Top Destination IP
-############################################################
-
-st.subheader("🎯 Top Destination IP")
-
-if packet_df.empty:
-
-    st.info("Packet 데이터가 없습니다.")
-
-else:
-
-    top_dst = (
-
-        packet_df["dst_ip"]
-
-        .value_counts()
-
-        .head(10)
-
-    )
-
-    st.bar_chart(top_dst)
-
-############################################################
-# Packet Size Distribution
-############################################################
-
-st.divider()
-
-st.subheader("📦 Packet Size Distribution")
-
-if packet_df.empty:
-
-    st.info("Packet 데이터가 없습니다.")
-
-else:
-
-    packet_size_chart = packet_df["packet_size"]
-
-    st.bar_chart(packet_size_chart)
-
-############################################################
-# Flow Protocol Distribution
-############################################################
-
-st.divider()
-
-st.subheader("🌐 Flow Protocol")
-
-if flow_df.empty:
-
-    st.info("Flow 데이터가 없습니다.")
-
-else:
-
-    flow_protocol = (
-        flow_df["protocol"]
-        .value_counts()
-    )
-
-    st.bar_chart(flow_protocol)
-
-############################################################
-# TCP Flag Statistics
-############################################################
-
-st.divider()
-
-st.subheader("🚦 TCP Flag Statistics")
-
-if packet_df.empty:
-
-    st.info("Packet 데이터가 없습니다.")
-
-else:
-
-    tcp_flag_chart = (
-
-        packet_df["tcp_flags"]
-
-        .fillna("NONE")
-
-        .replace("", "NONE")
-
-        .value_counts()
-
-    )
-
-    st.bar_chart(
-        tcp_flag_chart
-    )
-
-############################################################
-# Footer
-############################################################
-
-st.divider()
-
-left, center, right = st.columns(3)
-
-with left:
-
-    st.success(
-        f"Packets : {len(packet_df)}"
-    )
-
-with center:
-
-    st.info(
-        f"Flows : {len(flow_df)}"
-    )
-
-with right:
-
-    st.error(
-        f"Warnings : {len(warning_df)}"
-    )
-
-st.caption(
-    "Packet Analyzer SOC Dashboard | Streamlit + SQLite + AgGrid"
-)
-
-############################################################
-# SOC UI Upgrade
-############################################################
-
-st.markdown("""
-<style>
-
-/* KPI */
-
-div[data-testid="stMetric"]{
-
-background:white;
-
-border-radius:12px;
-
-padding:15px;
-
-border-left:6px solid #0078D4;
-
-box-shadow:0 2px 8px rgba(0,0,0,.08);
-
-transition:.2s;
-
-}
-
-div[data-testid="stMetric"]:hover{
-
-transform:translateY(-2px);
-
-box-shadow:0 5px 14px rgba(0,0,0,.18);
-
-}
-
-/* Section */
-
-h2{
-
-padding-top:10px;
-
-padding-bottom:10px;
-
-color:#0F172A;
-
-}
-
-/* Button */
-
-.stDownloadButton>button{
-
-background:#0078D4;
-
-color:white;
-
-border-radius:8px;
-
-border:none;
-
-padding:8px 20px;
-
-font-weight:bold;
-
-}
-
-.stDownloadButton>button:hover{
-
-background:#106EBE;
-
-}
-
-/* Sidebar */
-
-section[data-testid="stSidebar"]{
-
-background:#EEF3F8;
-
-}
-
-/* Divider */
-
-hr{
-
-margin-top:25px;
-
-margin-bottom:25px;
-
-}
-
-/* Table */
-
-.ag-theme-streamlit{
-
-border-radius:12px;
-
-overflow:hidden;
-
-border:1px solid #D8DEE9;
-
-}
-
-</style>
-
-""", unsafe_allow_html=True)
-
-############################################################
-# Traffic Summary
-############################################################
-
-st.divider()
-
-st.subheader("📈 Traffic Summary")
-
-traffic1,traffic2,traffic3 = st.columns(3)
-
-if not packet_df.empty:
-
-    traffic1.metric(
-
-        "Total Traffic",
-
-        f"{packet_df['packet_size'].sum():,} B"
-
-    )
-
-    traffic2.metric(
-
-        "Average Payload",
-
-        f"{int(packet_df['payload_size'].mean())} B"
-
-    )
-
-    traffic3.metric(
-
-        "Largest Packet",
-
-        f"{packet_df['packet_size'].max()} B"
-
-    )
-
-############################################################
-# Top Talker
-############################################################
-
-st.divider()
-
-left,right = st.columns(2)
-
-with left:
-
-    st.subheader("🌍 Top Source IP")
-
-    if not packet_df.empty:
-
-        top_src = (
-
-            packet_df
-
-            .groupby("src_ip")
-
-            .size()
-
-            .sort_values(ascending=False)
-
-            .head(10)
-
-        )
-
-        st.bar_chart(top_src)
-
-with right:
-
-    st.subheader("🎯 Top Destination IP")
-
-    if not packet_df.empty:
-
-        top_dst = (
-
-            packet_df
-
-            .groupby("dst_ip")
-
-            .size()
-
-            .sort_values(ascending=False)
-
-            .head(10)
-
-        )
-
-        st.bar_chart(top_dst)
-
-############################################################
-# Packet Size Statistics
-############################################################
-
-st.divider()
-
-st.subheader("📦 Packet Size Statistics")
-
-if not packet_df.empty:
-
-    stat1,stat2,stat3,stat4 = st.columns(4)
-
-    stat1.metric(
-
-        "Minimum",
-
-        packet_df["packet_size"].min()
-
-    )
-
-    stat2.metric(
-
-        "Maximum",
-
-        packet_df["packet_size"].max()
-
-    )
-
-    stat3.metric(
-
-        "Average",
-
-        int(packet_df["packet_size"].mean())
-
-    )
-
-    stat4.metric(
-
-        "Median",
-
-        int(packet_df["packet_size"].median())
-
-    )
-
-############################################################
-# Flow TCP Statistics
-############################################################
-
-st.divider()
-
-st.subheader("🌐 TCP Statistics")
-
-if not flow_df.empty:
-
-    syn = int(flow_df["syn_count"].sum())
-
-    ack = int(flow_df["ack_count"].sum())
-
-    fin = int(flow_df["fin_count"].sum())
-
-    rst = int(flow_df["rst_count"].sum())
-
-    tcp = pd.DataFrame({
-
-        "Flag":[
-
-            "SYN",
-
-            "ACK",
-
-            "FIN",
-
-            "RST"
-
-        ],
-
-        "Count":[
-
-            syn,
-
-            ack,
-
-            fin,
-
-            rst
-
-        ]
-
-    })
-
-    st.bar_chart(
-
-        tcp.set_index("Flag")
-
-    )
-
-############################################################
-# Critical Warning
-############################################################
-
-st.divider()
-
-st.subheader("🚨 Critical Warning")
-
-if not warning_df.empty:
-
-    critical = warning_df[
-
-        warning_df["counter"]>=100
-
-    ]
-
-    if len(critical):
-
-        st.error(
-
-            f"Critical Attack : {len(critical)}"
-
-        )
+        packet_detail = {
+
+            "Packet ID": selected.get("id"),
+            "Timestamp": selected.get("timestamp"),
+            "Source IP": selected.get("src_ip"),
+            "Destination IP": selected.get("dst_ip"),
+            "Source Port": selected.get("src_port"),
+            "Destination Port": selected.get("dst_port"),
+            "Protocol": selected.get("protocol"),
+            "Packet Size": selected.get("packet_size"),
+            "Payload Size": selected.get("payload_size"),
+            "TCP Flags": selected.get("tcp_flags"),
+
+        }
 
         st.dataframe(
-
-            critical,
-
+            make_detail_dataframe(packet_detail),
             use_container_width=True,
+            hide_index=True,
+            height=DETAIL_HEIGHT,
+        )
 
-            hide_index=True
+# ============================================================
+# Part 6-1
+# Traffic Charts
+# ============================================================
 
+st.markdown("<br>", unsafe_allow_html=True)
+
+chart_col1, chart_col2 = st.columns([1.3, 1.0], gap="medium")
+
+# ============================================================
+# Traffic Timeline
+# ============================================================
+
+with chart_col1:
+
+    st.markdown(
+        """
+<div class="panel">
+<div class="panel-title">
+📈 Traffic Timeline
+</div>
+</div>
+""",
+        unsafe_allow_html=True,
+    )
+
+    if not packet_df.empty and "timestamp" in packet_df.columns:
+
+        chart_df = packet_df.copy()
+
+        try:
+
+            chart_df["timestamp"] = pd.to_datetime(
+                chart_df["timestamp"],
+                unit="s",
+                errors="coerce"
+            )
+
+        except Exception:
+
+            chart_df["timestamp"] = pd.to_datetime(
+                chart_df["timestamp"],
+                errors="coerce"
+            )
+
+        chart_df = chart_df.dropna(subset=["timestamp"])
+
+        if not chart_df.empty:
+
+            chart_df["time"] = (
+                chart_df["timestamp"]
+                .dt.floor("1s")
+            )
+
+            traffic = (
+                chart_df
+                .groupby("time")
+                .size()
+                .reset_index(name="Packets")
+            )
+
+            fig = px.line(
+                traffic,
+                x="time",
+                y="Packets",
+                markers=True
+            )
+
+            fig.update_layout(
+                margin=dict(l=10, r=10, t=10, b=10),
+                height=CHART_HEIGHT,
+                template="plotly_white",
+                xaxis_title="Time",
+                yaxis_title="Packets",
+                hovermode="x unified"
+            )
+
+            st.plotly_chart(
+                fig,
+                use_container_width=True
+            )
+
+        else:
+
+            st.info("No traffic data.")
+
+    else:
+
+        st.info("No traffic data.")
+
+# ============================================================
+# Protocol Distribution
+# ============================================================
+
+with chart_col2:
+
+    st.markdown(
+        """
+<div class="panel">
+<div class="panel-title">
+📊 Protocol Distribution
+</div>
+</div>
+""",
+        unsafe_allow_html=True,
+    )
+
+    if (
+        not packet_df.empty
+        and "protocol" in packet_df.columns
+    ):
+
+        protocol_df = (
+            packet_df["protocol"]
+            .value_counts()
+            .reset_index()
+        )
+
+        protocol_df.columns = [
+            "Protocol",
+            "Count"
+        ]
+
+        fig = px.pie(
+            protocol_df,
+            names="Protocol",
+            values="Count",
+            hole=0.45
+        )
+
+        fig.update_layout(
+            template="plotly_white",
+            margin=dict(l=10, r=10, t=10, b=10),
+            height=CHART_HEIGHT,
+            showlegend=True
+        )
+
+        st.plotly_chart(
+            fig,
+            use_container_width=True
         )
 
     else:
 
-        st.success(
+        st.info("No protocol data.")
 
-            "No Critical Warning"
+# ============================================================
+# Part 6-2
+# World Map (PyDeck)
+# ============================================================
 
+st.markdown("<br>", unsafe_allow_html=True)
+
+map_col, country_col = st.columns([1.45, 1.0], gap="medium")
+
+# ============================================================
+# World Map
+# ============================================================
+
+with map_col:
+
+    st.markdown(
+        """
+<div class="panel">
+<div class="panel-title">
+🌍 World Traffic Map
+</div>
+</div>
+""",
+        unsafe_allow_html=True,
+    )
+
+    map_df = pd.DataFrame()
+
+    if not packet_df.empty:
+
+        if {"latitude", "longitude"}.issubset(packet_df.columns):
+
+            map_df = (
+                packet_df[
+                    ["latitude", "longitude"]
+                ]
+                .dropna()
+                .copy()
+            )
+
+            map_df.rename(
+                columns={
+                    "latitude": "lat",
+                    "longitude": "lon"
+                },
+                inplace=True
+            )
+
+    if not map_df.empty:
+
+        layer = pdk.Layer(
+            "ScatterplotLayer",
+            data=map_df,
+            get_position="[lon, lat]",
+            get_radius=20000,
+            radius_min_pixels=3,
+            radius_max_pixels=10,
+            pickable=True,
+            opacity=0.7,
         )
 
-############################################################
-# Recent Packet
-############################################################
+        view_state = pdk.ViewState(
+            latitude=float(map_df["lat"].mean()),
+            longitude=float(map_df["lon"].mean()),
+            zoom=1.5,
+            pitch=0,
+        )
 
-st.divider()
+        deck = pdk.Deck(
+            layers=[layer],
+            initial_view_state=view_state,
+            map_style="light",
+            tooltip={
+                "text": "Lat : {lat}\nLon : {lon}"
+            },
+        )
 
-st.subheader("🕒 Recent Packet")
+        st.pydeck_chart(deck, use_container_width=True)
 
-if not packet_df.empty:
+    else:
 
-    st.dataframe(
+        deck = pdk.Deck(
+            initial_view_state=pdk.ViewState(
+                latitude=DEFAULT_LAT,
+                longitude=DEFAULT_LON,
+                zoom=DEFAULT_ZOOM,
+                pitch=DEFAULT_PITCH,
+            ),
+            map_style="light",
+        )
 
-        packet_df.head(20),
+        st.pydeck_chart(deck, use_container_width=True)
 
-        use_container_width=True,
+# ============================================================
+# Country Distribution
+# ============================================================
 
-        hide_index=True
+with country_col:
 
+    st.markdown(
+        """
+<div class="panel">
+<div class="panel-title">
+🌎 Country Distribution
+</div>
+</div>
+""",
+        unsafe_allow_html=True,
     )
 
-############################################################
-# Recent Flow
-############################################################
+    if (
+        not packet_df.empty
+        and "country" in packet_df.columns
+    ):
 
-st.subheader("🕒 Recent Flow")
+        country_df = (
+            packet_df["country"]
+            .fillna("Unknown")
+            .value_counts()
+            .reset_index()
+        )
 
-if not flow_df.empty:
+        country_df.columns = [
+            "Country",
+            "Count"
+        ]
 
-    st.dataframe(
+        fig = px.pie(
+            country_df,
+            names="Country",
+            values="Count",
+            hole=0.5,
+        )
 
-        flow_df.head(20),
+        fig.update_layout(
+            template="plotly_white",
+            margin=dict(l=10, r=10, t=10, b=10),
+            height=CHART_HEIGHT,
+            showlegend=True,
+        )
 
-        use_container_width=True,
+        st.plotly_chart(
+            fig,
+            use_container_width=True,
+        )
 
-        hide_index=True
+    else:
 
-    )
+        st.info("Country information is not available.")
 
-############################################################
-# Recent Warning
-############################################################
-
-st.subheader("🕒 Recent Warning")
-
-if not warning_df.empty:
-
-    st.dataframe(
-
-        warning_df.head(20),
-
-        use_container_width=True,
-
-        hide_index=True
-
-    )
-
-############################################################
+# ============================================================
+# Part 7
 # Footer
-############################################################
+# ============================================================
 
-st.divider()
+st.markdown("<br>", unsafe_allow_html=True)
 
-st.caption(
+st.markdown(
+    f"""
+<div class="footer">
 
-"Packet Analyzer v1.0 | SOC Dashboard | Streamlit + SQLite + AgGrid"
+Packet Analyzer Dashboard |
+Auto Refresh : 1 sec |
+Packets : {format_number(total_packets)} |
+Flows : {format_number(total_flows)} |
+Warnings : {format_number(total_warnings)}
 
+</div>
+""",
+    unsafe_allow_html=True,
 )
+
+# ============================================================
+# Part 8
+# Finish / Runtime Validation
+# ============================================================
+
+# ------------------------------------------------------------
+# Data Validation
+# ------------------------------------------------------------
+
+if packet_df is None:
+    packet_df = empty_dataframe(PACKET_COLUMNS)
+
+if flow_df is None:
+    flow_df = empty_dataframe(FLOW_COLUMNS)
+
+if warning_df is None:
+    warning_df = empty_dataframe(WARNING_COLUMNS)
+
+# ------------------------------------------------------------
+# Type Convert
+# ------------------------------------------------------------
+
+for df in (packet_df, flow_df, warning_df):
+
+    if df.empty:
+        continue
+
+    df.fillna("", inplace=True)
+
+# ------------------------------------------------------------
+# Sidebar Hide
+# ------------------------------------------------------------
+
+st.markdown(
+    """
+<script>
+
+const sidebar = window.parent.document.querySelector('[data-testid="stSidebar"]');
+
+if(sidebar){
+    sidebar.style.display="none";
+}
+
+</script>
+""",
+    unsafe_allow_html=True
+)
+
+# ============================================================
+# End
+# ============================================================
