@@ -1,18 +1,21 @@
 ## 작업 목록
-- [ ] Scan 탐지 모듈
-- [ ] Flood 탐지 모듈
-- [ ] Discord 모듈
-- [ ] 웹페이지 대시보드 개발
-- [ ] 웹페이지에서 차단 기능 구현
+- [ ] 웹페이지에서 차단 기능 구현 > pull request
 - [ ] 웹페이지에서 알람 기능 구현
 - [ ] 웹페이지에서 로그인 기능 구현
-- [ ] 웹페이지에서 ip에 따른 지도 구현
+- [ ] Streamlit에서 차단됨 로그들 보여주기
+- [ ] Streamlit에서 경고 확인
+
 
 ## 완료된 작업 목록
 - [x] 저장소·dev 개설, 팀원 초대, 보호 규칙 — 팀장 RyunK
 - [x] 코드 골격 작성 — 팀장 RyunK
 - [x] amplification detection 개발 — 팀장 RyunK
 - [x] packets, warnings, flows를 DB에 저장 - 팀장 RyunK
+- [x] Scan 탐지 모듈
+- [x] Flood 탐지 모듈
+- [x] Discord 모듈
+- [x] 웹페이지 대시보드 개발
+- [x] 웹페이지에서 ip에 따른 지도 구현
 
 ## 코드 추가
 ### 탐지 코드

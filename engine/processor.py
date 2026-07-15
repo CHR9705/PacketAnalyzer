@@ -76,9 +76,13 @@ class PacketProcessor:
         last_flush = time.time()
         while True:
             raw_packet = self.packet_queue.get()
+            
             packet = self.process_packet(raw_packet)
             
             if packet is None:
+                continue
+
+            if packet.dst_port == 22 or packet.src_port == 22:
                 continue
 
             context = self.flow_manager.update(packet)
@@ -86,11 +90,14 @@ class PacketProcessor:
             if time.time() - self.last_flow_cleanup >= 5:
                 self.flow_manager.remove_inactive_flows(current_time=packet.timestamp, db=self.db_module)
                 self.last_flow_cleanup = time.time()
-
-            self.db_module.insert_packet_table(
-                packet.timestamp, packet.src_ip, packet.dst_ip, 
-                packet.src_port, packet.dst_port, packet.protocol, 
-                packet.packet_size, packet.payload_size, packet.tcp_flags)
+            
+            try: 
+                self.db_module.insert_packet_table(
+                    packet.timestamp, packet.src_ip, packet.dst_ip, 
+                    packet.src_port, packet.dst_port, packet.protocol, 
+                    packet.packet_size, packet.payload_size, packet.tcp_flags)
+            except Exception as e :
+                print(e)
             
 
             for detect in self.detectors:
@@ -102,13 +109,16 @@ class PacketProcessor:
                     result, name = raw_result
 
                 if result:
-                    warning_manager.add_warning(
-                        packet.timestamp,
-                        packet.src_ip,
-                        name
-                    )
+                    try: 
+                        warning_manager.add_warning(
+                            packet.timestamp,
+                            packet.src_ip,
+                            name
+                        )
+                    except Exception as e :
+                        print(e)
 
-                if time.time() - last_flush >= 5:
+                if time.time() - last_flush >= 1:
                     warning_manager.flush(self.db_module)
                     last_flush = time.time()
 
