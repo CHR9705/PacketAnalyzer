@@ -10,18 +10,44 @@ class WarningRepo:
                 last_timestamp INTEGER,
                 src_ip TEXT,
                 attack_type TEXT,
-                counter INTEGER
+                counter INTEGER,
             );
         ''')
     
     def insert_warning_table(self, timestamp, src_ip, attack_type, counter):
-        self.db.cursor.execute('''
-            INSERT INTO warnings (first_timestamp, last_timestamp, src_ip, attack_type, counter)
-            VALUES (?, ?, ?, ?, ?)
-                            
-            ON CONFLICT(src_ip, attack_type)
-            DO UPDATE SET
-            counter = counter + excluded.counter,
-            last_timestamp = excluded.last_timestamp
-        ''', (timestamp, timestamp, src_ip, attack_type, counter))
+        current_timestamp = timestamp
+        self.db.cursor.execute("""
+            UPDATE warnings
+            SET
+                counter = counter + ?,
+                last_timestamp = ?
+            WHERE
+                src_ip = ?
+                AND attack_type = ?
+                AND last_timestamp >= ?;
+        """, (
+            counter,
+            current_timestamp,
+            src_ip,
+            attack_type,
+            current_timestamp - 10
+        ))
+
+        if self.db.cursor.rowcount == 0:
+            self.db.cursor.execute("""
+                INSERT INTO warnings (
+                    first_timestamp,
+                    last_timestamp,
+                    src_ip,
+                    attack_type,
+                    counter
+                )
+                VALUES (?, ?, ?, ?, ?)
+            """, (
+                current_timestamp,
+                current_timestamp,
+                src_ip,
+                attack_type,
+                counter
+            ))
         self.db.conn.commit()
