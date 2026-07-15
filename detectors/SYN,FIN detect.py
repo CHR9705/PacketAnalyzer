@@ -39,5 +39,5 @@ def detect(packet: PacketData, flow: Flow):
             f"{scan_type.lower()}={scan_count}",
             f"pps={flow.pps:.2f}"
         )
-        (True, f"{scan_type} Scan")
+        return (True, f"{scan_type} Scan")
     return (False, "")
