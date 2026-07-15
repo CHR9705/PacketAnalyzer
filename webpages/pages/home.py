@@ -1,12 +1,17 @@
 import sqlite3
 import pandas as pd
 import streamlit as st
+import streamlit.components.v1 as components
 import plotly.express as px
 from datetime import datetime, timedelta
 
 from streamlit_autorefresh import st_autorefresh
 
 from webpages.functions.titles  import get_h2
+
+from datetime import datetime, timezone, timedelta
+
+kst = timezone(timedelta(hours=9))
 
 st_autorefresh(
     interval= 1 * 1000,   #1초마다 한번씩 새로고침
@@ -61,6 +66,12 @@ FROM warnings
 # KPI
 ########################################################
 
+# components.iframe(
+#     "http://localhost:3000/d/adnpnxq/new-dashboard?orgId=1&from=now-1m&to=now&timezone=browser&refresh=5s&kiosk",
+#     height=600,
+#     scrolling=True
+# )
+
 st.markdown("""
 <style>
 /* metric 전체 박스 */
@@ -89,7 +100,7 @@ col1, col2, col3, col4 = st.columns(4)
 
 with col1:
     st.metric(
-        "Total Packets",
+        "분당 패킷 수",
         len(packets)
     )
 
@@ -198,6 +209,7 @@ with right:
     else:
 
         for _, row in warnings.iterrows():
+            last_time = datetime.fromtimestamp(row.last_timestamp, tz=kst).strftime("%Y-%m-%d %H:%M:%S")
             st.markdown(f"""
 <div style="
     border:1px solid #ddd;
@@ -212,6 +224,7 @@ with right:
 ">
     <span>{row.attack_type}</span>
     <span>{row.src_ip}</span>
+    <span>{last_time}</span>
     <span>{row.counter}회</span>
 </div>
 """, unsafe_allow_html=True)

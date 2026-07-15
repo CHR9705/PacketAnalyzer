@@ -32,43 +32,43 @@ def detect(packet: PacketData, flow: Flow):
 
     # 4. Reflection Attack 최종 임계치 판정 (5개 이상 수집 시 무조건 발령)
     if (
-        flow.packet_count >= 5 
+        flow.packet_count >= 200 
         and is_amplification_port
     ):
 
         # [🔒 문법 완성] 이 안쪽의 모든 실행문들은 정확히 공백 8칸 라인으로 통일합니다.
-        print("\n" + "=" * 70)
+        # print("\n" + "=" * 70)
         print("🚨 UDP REFLECTION ATTACK DETECTED 🚨")
-        print("=" * 70)
+        # print("=" * 70)
 
-        print(f"Time           : {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
-        print(f"Source IP      : {packet.src_ip}")
-        print(f"Destination IP : {packet.dst_ip}")
-        print(f"Protocol       : {flow.protocol}")
+        # print(f"Time           : {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+        # print(f"Source IP      : {packet.src_ip}")
+        # print(f"Destination IP : {packet.dst_ip}")
+        # print(f"Protocol       : {flow.protocol}")
 
-        # 하위 내부 조건문 정렬 규칙 일치
-        if hasattr(packet, "src_port") and packet.src_port:
-            print(f"Source Port    : {packet.src_port}")
-        if hasattr(packet, "dst_port") and packet.dst_port:
-            print(f"Dest Port      : {packet.dst_port}")
+        # # 하위 내부 조건문 정렬 규칙 일치
+        # if hasattr(packet, "src_port") and packet.src_port:
+        #     print(f"Source Port    : {packet.src_port}")
+        # if hasattr(packet, "dst_port") and packet.dst_port:
+        #     print(f"Dest Port      : {packet.dst_port}")
 
-        print("-" * 70)
+        # print("-" * 70)
 
-        print(f"Total Packets  : {flow.packet_count}")
-        print(f"PPS            : {flow.pps:.2f}")
-        print(f"Forward (Req)  : {forward_count}")
-        print(f"Backward (Resp): {backward_count}")
-        print(f"Backward %     : {backward_ratio:.2%}")
+        # print(f"Total Packets  : {flow.packet_count}")
+        # print(f"PPS            : {flow.pps:.2f}")
+        # print(f"Forward (Req)  : {forward_count}")
+        # print(f"Backward (Resp): {backward_count}")
+        # print(f"Backward %     : {backward_ratio:.2%}")
 
-        print("-" * 70)
+        # print("-" * 70)
 
-        print("Threat Level   : HIGH")
-        print("Attack Type    : UDP Reflection Attack")
-        print("Reason         : Excessive UDP asymmetric response traffic")
+        # print("Threat Level   : HIGH")
+        # print("Attack Type    : UDP Reflection Attack")
+        # print("Reason         : Excessive UDP asymmetric response traffic")
 
-        print("-" * 70)
-        print("Status         : ALERT GENERATED") # 🎯 드디어 출력될 마지막 문구
-        print("=" * 70)
+        # print("-" * 70)
+        # print("Status         : ALERT GENERATED") # 🎯 드디어 출력될 마지막 문구
+        # print("=" * 70)
 
         return True, "UDP Reflection Attack"
 
