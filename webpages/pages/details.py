@@ -28,12 +28,13 @@ PROTOCOL_COLORS = {
 DEFAULT_COLOR = {"bg": "#f3f4f6", "fg": "#6b7280", "accent": "#9ca3af"}
 
 from  webpages.css.st_header import _setting
-from  webpages.css.st_metric import metric_cards
+from  webpages.css.st_metric import metric_cards, detail_card_styles
 from  webpages.css.st_alertbox import alret_box_style
 
 _setting()
 metric_cards()
 alret_box_style()
+detail_card_styles()
 
 
 
@@ -69,6 +70,7 @@ def _display_ready(df: pd.DataFrame, ts_cols: list[str]) -> pd.DataFrame:
     return df
 
 
+
 def render_detail(row: pd.Series, kind: str = "packet") -> str:
     """선택된 packet/flow row를 컴팩트한 2열 카드 HTML로 렌더링"""
     d = row.to_dict()
@@ -100,13 +102,13 @@ def render_detail(row: pd.Series, kind: str = "packet") -> str:
     dst_ip = d.get("dst_ip", "-")
     src_port = d.get("src_port")
     dst_port = d.get("dst_port")
-    src_label = f"{src_ip}:{src_port}" if src_port not in (None, "", "nan") else f"{src_ip}"
-    dst_label = f"{dst_ip}:{dst_port}" if dst_port not in (None, "", "nan") else f"{dst_ip}"
+    src_label = f"{src_ip}   :   {src_port}" if src_port not in (None, "", "nan") else f"{src_ip}"
+    dst_label = f"{dst_ip}   :   {dst_port}" if dst_port not in (None, "", "nan") else f"{dst_ip}"
 
     header = f"""
     <div class="detail-header" style="--accent-a:{colors['accent']}; --accent-b:{colors['accent']}cc;">
         <div class="detail-id-row">
-            <span class="detail-id">#{d.get('id', '-')} · {ts_display}</span>
+            <span class="detail-id">#{d.get('id', '-')}</span>
             {kind_badge}
         </div>
         <div class="detail-flow-line">
@@ -162,7 +164,6 @@ def render_detail(row: pd.Series, kind: str = "packet") -> str:
     </div>
     """
     return _flatten_html(html)
-
 
 # ----------------------------------------------------------------------
 # 실제 DB 로더 (_dbsource.py 연동)
