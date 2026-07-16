@@ -1,17 +1,19 @@
 import sqlite3
 import pandas as pd
 import streamlit as st
-import streamlit.components.v1 as components
 import plotly.express as px
-from datetime import datetime, timedelta
+from datetime import datetime, timezone, timedelta
+import time
 
 from streamlit_autorefresh import st_autorefresh
 
 from webpages.functions.titles  import get_h2
 
-from datetime import datetime, timezone, timedelta
-
 kst = timezone(timedelta(hours=9))
+
+from  webpages.css.st_header import _setting
+from  webpages.css.st_metric import metric_cards
+from  webpages.css.st_alertbox import alret_box_style
 
 st_autorefresh(
     interval= 1 * 1000,   #1초마다 한번씩 새로고침
@@ -26,13 +28,14 @@ st.set_page_config(
 conn = sqlite3.connect("packets.db")
 # conn = sqlite3.connect(r"C:\Users\RyunK_IT\Documents\vscodeProject\vm_shared\packets.db")
 
+_setting()
 
 st.markdown("""
 <h1 style="
     font-size:28px;
     margin:0;
 ">
-🛡 Packet Analyzer
+Home
 </h1>
 """, unsafe_allow_html=True)
 
@@ -62,6 +65,42 @@ SELECT count(*) as cnt
 FROM warnings
 """, conn)
 
+
+def check_new_warning():
+
+    latest_ts = warnings["last_timestamp"].iloc[0]  # 숫자 값 그대로 사용
+    now_ts = time.time()  # 현재 시각도 숫자(epoch)로
+
+    if "last_flashed_ts" not in st.session_state:
+        st.session_state.last_flashed_ts = None
+
+    is_new = (
+        (now_ts - latest_ts) < 5
+        and latest_ts != st.session_state.last_flashed_ts
+    )
+
+    if is_new:
+        st.session_state.last_flashed_ts = latest_ts
+
+        st.markdown("""
+        <style>
+        @keyframes flash-red-fade {
+            0%   { opacity: 0.55; }
+            100% { opacity: 0; }
+        }
+        .flash-overlay {
+            position: fixed;
+            top: 0; left: 0;
+            width: 100vw; height: 100vh;
+            background-color: red;
+            pointer-events: none;
+            z-index: 999999;
+            animation: flash-red-fade 1s ease-out forwards;
+        }
+        </style>
+        <div class="flash-overlay"></div>
+        """, unsafe_allow_html=True)
+
 ########################################################
 # KPI
 ########################################################
@@ -72,31 +111,16 @@ FROM warnings
 #     scrolling=True
 # )
 
-st.markdown("""
-<style>
-/* metric 전체 박스 */
-[data-testid="stMetric"] {
-    padding: 8px 10px;
-}
 
-/* 제목(Label) */
-[data-testid="stMetricLabel"] {
-    font-size: 12px;
-}
+metric_cards()
 
-/* 숫자(Value) */
-[data-testid="stMetricValue"] {
-    font-size: 24px;
-}
+# packet_size 합계 (바이트 단위라고 가정)
+total_bytes = packets["packet_size"].sum()
 
-/* 변화량(Delta) */
-[data-testid="stMetricDelta"] {
-    font-size: 12px;
-}
-</style>
-""", unsafe_allow_html=True)
+# bps 계산 (비트 단위)
+bps = (total_bytes * 8) / 60
 
-col1, col2, col3, col4 = st.columns(4)
+col1, col2, col3, col4, col5 = st.columns(5)
 
 with col1:
     st.metric(
@@ -112,16 +136,21 @@ with col2:
 
 with col3:
     st.metric(
-        "Warnings",
-        warnings_cnt['cnt']
+        "BPS",
+        f"{bps/1000:.1f} Kbps"
     )
 
 with col4:
     st.metric(
-        "Active Source IP",
-        packets["src_ip"].nunique()
+        "Warnings",
+        warnings_cnt['cnt']
     )
 
+with col5:
+    st.metric(
+        "활성 IP",
+        packets["src_ip"].nunique()
+    )
 
 # st.divider()
 
@@ -198,6 +227,7 @@ with left:
     # st.plotly_chart(fig, width="stretch")
 
   
+alret_box_style()
 
 with right:
 
@@ -211,21 +241,11 @@ with right:
         for _, row in warnings.iterrows():
             last_time = datetime.fromtimestamp(row.last_timestamp, tz=kst).strftime("%Y-%m-%d %H:%M:%S")
             st.markdown(f"""
-<div style="
-    border:1px solid #ddd;
-    border-radius:6px;
-    padding:6px 10px;
-    margin-bottom:4px;
-    display:flex;
-    justify-content:space-between;
-    font-size: 14px;
-    color: #B91C1C;
-    background-color: #FDECEC;
-">
+<div class="alert-div">
     <span>{row.attack_type}</span>
     <span>{row.src_ip}</span>
     <span>{last_time}</span>
-    <span>{row.counter}회</span>
+    <span class="alert-cnt-span">{row.counter}</span>
 </div>
 """, unsafe_allow_html=True)
 
@@ -320,3 +340,5 @@ with right:
             ),
         }
     )
+
+check_new_warning()
