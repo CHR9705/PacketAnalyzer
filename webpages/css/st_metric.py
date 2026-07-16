@@ -5,6 +5,7 @@ def metric_cards():
     st.markdown("""
 <style>
 /* metric 전체 박스 */
+.metric-card,
 [data-testid="stMetric"] {
     background: linear-gradient(135deg, #1e222a 0%, #262b35 100%);
     border: 1px solid rgba(255, 255, 255, 0.06);
@@ -18,6 +19,7 @@ def metric_cards():
     transition: transform 0.15s ease, box-shadow 0.15s ease;
 }
 
+
 [data-testid="stMetric"]:hover {
     transform: translateY(-2px);
     box-shadow:
@@ -26,6 +28,7 @@ def metric_cards():
 }
 
 /* 제목(Label) */
+.metric-label
 [data-testid="stMetricLabel"] {
     font-size: 13px;
     font-weight: 600;
@@ -36,6 +39,7 @@ def metric_cards():
 }
 
 /* 숫자(Value) - 그라데이션 텍스트로 포인트 */
+.metric-value
 [data-testid="stMetricValue"] {
     font-size: 34px;
     font-weight: 800;

@@ -65,6 +65,16 @@ SELECT count(*) as cnt
 FROM warnings
 """, conn)
 
+blacklist_cnt = pd.read_sql_query("""
+SELECT count(*) as cnt
+FROM black_list
+""", conn)
+
+blocked_cnt = pd.read_sql_query("""
+SELECT count(*) as cnt
+FROM blocked_packets
+""", conn)
+
 
 def check_new_warning():
 
@@ -123,24 +133,34 @@ total_bytes = packets["packet_size"].sum()
 # bps 계산 (비트 단위)
 bps = (total_bytes * 8) / 60
 
-col1, col2, col3 = st.columns(3)
+# 엔진 상태
+engine_status = "Running" if packets["timestamp"].max() + 5 > now else "Stopped"
+
+col, col1, col2, col3 = st.columns(4)
+
+# with st.container(key = "nowtime-metric"):
+with col:
+    st.metric(
+        "현재 시각",
+        datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+    )
 
 with col1:
     st.metric(
         "엔진 상태",
-        len(packets)
+        engine_status
     )
 
 with col2:
     st.metric(
         "차단 IP 수",
-        round(len(packets)/60, 1)
+        blacklist_cnt['cnt']
     )
 
 with col3:
     st.metric(
-        "차단된 패킷 수",
-        f"{bps/1000:.1f} Kbps"
+        "1시간 이내 차단된 패킷 수",
+        blocked_cnt['cnt']
     )
 
 
