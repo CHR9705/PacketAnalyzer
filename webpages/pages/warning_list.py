@@ -1,7 +1,8 @@
 import os
 import sqlite3
-from datetime import datetime
 import time
+from datetime import datetime
+
 import altair as alt
 import pandas as pd
 import streamlit as st
@@ -11,15 +12,9 @@ st.set_page_config(layout="wide", page_title="네트워크 공격 탐지 대시�
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 DB_PATH = os.path.normpath(os.path.join(BASE_DIR, "..", "..", "packets.db"))
 
-BLACKLIST_TABLE = "black_list"         
-WHITELIST_TABLE = "white_list"        
+BLACKLIST_TABLE = "black_list"
+WHITELIST_TABLE = "white_list"
 IP_COLUMN = "ip"
-
-ATTACK_TYPES = [
-    "ACK flood", "DNS Amplification", "Fin flood", "NULL Scan",
-    "SSDP Amplification", "SYN flood", "SYN Scan", "FIN Scan",
-    "RST flood", "UDP flood", "UDP Scan", "Xmas Scan",
-]
 
 GRADE_EMOJI = {
     "Critical": "🔴",
@@ -29,6 +24,7 @@ GRADE_EMOJI = {
     "None": "🔵",
 }
 
+# 등급별 진한 색(차트, 뱃지 텍스트/테두리용)
 GRADE_COLORS = {
     "Critical": "#d32f2f",
     "High": "#f57c00",
@@ -37,10 +33,47 @@ GRADE_COLORS = {
     "None": "#1976d2",
 }
 
-# 차단 버튼을 눈에 띄는 빨간색으로 강조
+# 등급별 연한 배경색(뱃지 배경용) - 다크 카드 위에서 잘 보이도록 반투명 처리
+GRADE_BG = {
+    "Critical": "rgba(211, 47, 47, 0.18)",
+    "High": "rgba(245, 124, 0, 0.18)",
+    "Medium": "rgba(251, 192, 45, 0.18)",
+    "Low": "rgba(67, 160, 71, 0.18)",
+    "None": "rgba(25, 118, 210, 0.18)",
+}
+
+# --- 디자인 토큰 + 전역 스타일 ---
+# 배경/카드/여백/폰트 위계를 하나의 스타일 시트로 통일해서 관리한다.
 st.markdown(
     """
     <style>
+    :root {
+        --color-bg: #0e1117;
+        --color-card-bg: #1c1f26;
+        --color-border: #333844;
+        --color-text-primary: #e6e6e6;
+        --color-text-secondary: #9aa0a6;
+        --radius-md: 8px;
+        --radius-lg: 12px;
+        --shadow-sm: 0 1px 3px rgba(0,0,0,0.4);
+        --space-2: 8px;
+        --space-3: 16px;
+        --space-4: 24px;
+    }
+    .stApp {
+        background-color: var(--color-bg);
+        color: var(--color-text-primary);
+    }
+    h1 {
+        font-weight: 800 !important;
+        color: var(--color-text-primary) !important;
+    }
+    h3 {
+        font-weight: 600 !important;
+        color: #b5bac1 !important;
+        font-size: 1.15rem !important;
+    }
+    /* 차단 버튼을 눈에 띄는 빨간색으로 강조 */
     button[kind="primary"] {
         background-color: #d32f2f !important;
         border-color: #d32f2f !important;
@@ -87,36 +120,49 @@ def grade_from_counter(counter: int) -> str:
 
 
 def grade_display(counter: int) -> str:
-    """등급을 이모지와 함께 표시한다."""
+    """표(data_editor)용: 등급을 이모지와 함께 텍스트로 표시한다."""
     grade = grade_from_counter(counter)
     return f"{GRADE_EMOJI[grade]} {grade}"
 
 
+def grade_badge_html(grade: str) -> str:
+    """상세 카드용: 등급을 색이 있는 뱃지(pill)로 표시한다."""
+    color = GRADE_COLORS[grade]
+    bg = GRADE_BG[grade]
+    emoji = GRADE_EMOJI[grade]
+    return (
+        f"<span style='display:inline-block; padding:3px 12px; border-radius:999px; "
+        f"background-color:{bg}; color:{color}; font-weight:700; font-size:0.9em;'>"
+        f"{emoji} {grade}</span>"
+    )
+
+
 def format_ts(value) -> str:
-    """DB에 저장된 timestamp(유닉스 epoch 또는 문자열)를 사람이 읽기 쉬운 형태로 변환한다."""
+    """DB에 저장된 유닉스 timestamp를 한국 시간(KST) 기준으로 사람이 읽기 쉬운 형태로 변환한다."""
     try:
-        # 1. 숫자형 타임스탬프를 UTC 기준 datetime으로 변환
-        dt = pd.to_datetime(float(value), unit='s', utc=True)
-        
-        # 2. 한국 시간(Asia/Seoul)으로 시간대 변환
-        dt_kst = dt.tz_convert('Asia/Seoul')
-        
-        return dt_kst.strftime('%Y-%m-%d %H:%M:%S')
+        dt = pd.to_datetime(float(value), unit="s", utc=True)
+        dt_kst = dt.tz_convert("Asia/Seoul")
+        return dt_kst.strftime("%Y-%m-%d %H:%M:%S")
     except (ValueError, TypeError):
         return str(value)
 
 
-
-
-def field_html(label, value):
-    """상세 카드에 들어갈 라벨-값 한 쌍의 HTML을 만든다."""
-    label_style = "color:#666; font-size:0.85em; margin-bottom:2px;"
-    value_style = "font-size:1.05em; font-weight:600;"
-    return (
-        "<div style='margin:0 0 10px 0;'>"
-        f"<div style='{label_style}'>{label}</div>"
-        f"<div style='{value_style}'>{value}</div>"
+def field_grid_html(pairs, grade_color) -> str:
+    """상세 카드 전체를 2열 그리드 HTML로 만든다.
+    등급 색으로 카드 왼쪽에 컬러 바(border-left)를 주어 위험도를 한눈에 보이게 한다."""
+    cells = "".join(
+        "<div>"
+        f"<div style='color:var(--color-text-secondary); font-size:0.82em; margin-bottom:2px;'>{label}</div>"
+        f"<div style='font-size:1.02em; font-weight:600; color:var(--color-text-primary);'>{value}</div>"
         "</div>"
+        for label, value in pairs
+    )
+    return (
+        "<div style='border:1px solid var(--color-border); border-left:4px solid "
+        f"{grade_color}; border-radius:var(--radius-lg); padding:20px var(--space-4); "
+        "background-color:var(--color-card-bg); box-shadow:var(--shadow-sm); "
+        "display:grid; grid-template-columns:1fr 1fr; "
+        f"gap:var(--space-3) var(--space-4);'>{cells}</div>"
     )
 
 
@@ -124,7 +170,9 @@ def add_to_blacklist(ip: str, accepted: bool = False):
     try:
         conn = sqlite3.connect(DB_PATH, check_same_thread=False, isolation_level=None)
         conn.execute("PRAGMA busy_timeout = 5000")
-        existing = conn.execute("SELECT accepted FROM black_list WHERE ip = ? LIMIT 1", (ip,)).fetchone()
+        existing = conn.execute(
+            "SELECT accepted FROM black_list WHERE ip = ? LIMIT 1", (ip,)
+        ).fetchone()
         if existing:
             if existing[0] == 2:
                 return False, "차단해제로 등록된 IP입니다."
@@ -137,14 +185,16 @@ def add_to_blacklist(ip: str, accepted: bool = False):
     except Exception as e:
         return False, str(e)
 
-#취소가 아닌 x 시 재팝업 방지 파라미터 적용
+
+# 취소가 아닌 x 시 재팝업 방지 파라미터 적용
 def reset_confirm_dialog():
     st.session_state.confirm_dialog_id = None
     st.session_state.block_error = None
 
+
 @st.dialog("차단 확인", on_dismiss=reset_confirm_dialog)
 def confirm_block_dialog(row):
-    ip = row['src_ip']
+    ip = row["src_ip"]
     st.write(f"Src IP **{ip}** 를 정말 차단하시겠습니까?")
     col1, col2 = st.columns(2, gap="small")
     with col1:
@@ -155,8 +205,8 @@ def confirm_block_dialog(row):
                 st.session_state.block_error = None
                 st.rerun()
             else:
-                st.session_state.block_error = err  # 에러를 세션에 저장
-                st.rerun()  # 다시 그려도 에러가 세션에 남아있으므로 표시됨
+                st.session_state.block_error = err
+                st.rerun()
     with col2:
         if st.button("취소", key="cancel_block", width="stretch"):
             st.session_state.confirm_dialog_id = None
@@ -218,20 +268,24 @@ if "selected_id" not in st.session_state:
     st.session_state.selected_id = None
 
 st.markdown(
-    f"<div style='text-align:right; color:gray; font-size:0.85em;'>"
+    f"<div style='text-align:right; color:var(--color-text-secondary); font-size:0.85em;'>"
     f"마지막 업데이트: {st.session_state.last_updated.strftime('%Y-%m-%d %H:%M:%S')}</div>",
     unsafe_allow_html=True,
 )
 
 # --- 공격 유형별 카운트 차트 ---
-counts = df["attack_type"].value_counts().reindex(ATTACK_TYPES, fill_value=0)
-# 공격 유형별로 가장 심각한 등급(최대 counter 기준)을 구해서 막대 색상에 반영
-max_counter_by_type = df.groupby("attack_type")["counter"].max().reindex(ATTACK_TYPES, fill_value=0)
+# 고정된 목록이 아니라, 현재 warnings 테이블(Attack Packet List)에 실제로 존재하는
+# attack_type만 뽑아서 그래프를 그린다. 새로운 유형이 들어오면 막대가 새로 생기고,
+# 더 이상 들어오지 않는 유형은 자연스럽게 그래프에서 빠진다.
+present_types = sorted(df["attack_type"].dropna().unique().tolist()) if not df.empty else []
+
+counts = df["attack_type"].value_counts()
+max_counter_by_type = df.groupby("attack_type")["counter"].max()
 
 chart_df = pd.DataFrame({
-    "Attack Type": ATTACK_TYPES,
-    "Attack Count": counts.values,
-    "Grade": [grade_from_counter(c) for c in max_counter_by_type.values],
+    "Attack Type": present_types,
+    "Attack Count": [int(counts.get(t, 0)) for t in present_types],
+    "Grade": [grade_from_counter(max_counter_by_type.get(t, 0)) for t in present_types],
 })
 
 max_count = int(chart_df["Attack Count"].max()) if len(chart_df) else 0
@@ -239,7 +293,7 @@ y_domain_max = max_count if max_count > 0 else 1
 y_ticks = list(range(0, max_count + 1))
 
 base = alt.Chart(chart_df).encode(
-    x=alt.X("Attack Type", sort=ATTACK_TYPES, title=None,
+    x=alt.X("Attack Type", sort=present_types, title=None,
             axis=alt.Axis(labelAngle=-30)),
     y=alt.Y("Attack Count", title="Attack Count",
             scale=alt.Scale(domain=[0, y_domain_max], nice=False),
@@ -257,11 +311,26 @@ bars = base.mark_bar(
     tooltip=["Attack Type", "Attack Count", "Grade"],
 )
 
-labels = base.mark_text(align="center", baseline="bottom", dy=-4).encode(
+labels = base.mark_text(align="center", baseline="bottom", dy=-4, color="#e6e6e6").encode(
     text=alt.Text("Attack Count:Q"),
 )
 
-chart = (bars + labels).properties(height=350)
+chart = (
+    (bars + labels)
+    .properties(height=350, background="transparent")
+    .configure_axis(
+        labelColor="#c7cbd1",
+        titleColor="#c7cbd1",
+        gridColor="#2a2e37",
+        domainColor="#3a3f4a",
+        tickColor="#3a3f4a",
+    )
+    .configure_legend(
+        labelColor="#c7cbd1",
+        titleColor="#c7cbd1",
+    )
+    .configure_view(strokeWidth=0)
+)
 
 st.altair_chart(chart, width="stretch")
 
@@ -310,28 +379,22 @@ with col_detail:
     else:
         rows_by_id = {row["id"]: row for row in display_rows}
         selected_row = rows_by_id[selected_ids[0]]
-        grade = grade_display(selected_row["counter"])
+        grade_name = grade_from_counter(selected_row["counter"])
 
         st.markdown("**Detail Data View**")
 
-        card_style = (
-            "border:1px solid #ddd; border-radius:8px; padding:16px 20px; "
-            "background-color:#fafafa;"
-        )
+        pairs = [
+            ("ID", selected_row["id"]),
+            ("Attack Type", selected_row["attack_type"]),
+            ("Src IP", selected_row["src_ip"]),
+            ("Grade", grade_badge_html(grade_name)),
+            ("First Timestamp", format_ts(selected_row["first_timestamp"])),
+            ("Last Timestamp", format_ts(selected_row["last_timestamp"])),
+            ("Counter", selected_row["counter"]),
+        ]
+        st.markdown(field_grid_html(pairs, GRADE_COLORS[grade_name]), unsafe_allow_html=True)
 
-        card_html = f"<div style='{card_style}'>"
-        card_html += field_html("ID", selected_row["id"])
-        card_html += field_html("Attack Type", selected_row["attack_type"])
-        card_html += field_html("Grade", grade)
-        card_html += field_html("Src IP", selected_row["src_ip"])
-        card_html += field_html("First Timestamp", format_ts(selected_row["first_timestamp"]))
-        card_html += field_html("Last Timestamp", format_ts(selected_row["last_timestamp"]))
-        card_html += field_html("Counter", selected_row["counter"])
-        card_html += "</div>"
-
-        st.markdown(card_html, unsafe_allow_html=True)
-
-        st.markdown("<div style='height:14px;'></div>", unsafe_allow_html=True)
+        st.markdown("<div style='height:16px;'></div>", unsafe_allow_html=True)
 
         # 차단은 되돌릴 수 없는 액션이므로, 버튼을 누르면 팝업으로 한 번 더 확인받는다.
         if st.button("차단하기", key="block_button", type="primary"):

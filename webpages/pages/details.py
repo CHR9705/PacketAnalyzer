@@ -60,6 +60,14 @@ def _format_ts(value) -> str:
         return "-"
     return str(value)[:19]
 
+def _display_ready(df: pd.DataFrame, ts_cols: list[str]) -> pd.DataFrame:
+    """dataframe에 표시하기 전, 타임존 오프셋 없이 보기 좋은 문자열로 변환"""
+    df = df.copy()
+    for col in ts_cols:
+        if col in df.columns:
+            df[col] = df[col].apply(_format_ts)
+    return df
+
 
 def render_detail(row: pd.Series, kind: str = "packet") -> str:
     """선택된 packet/flow row를 컴팩트한 2열 카드 HTML로 렌더링"""
@@ -584,6 +592,7 @@ with left:
         packets_full = filtered.reset_index(drop=True)
         show_cols = [c for c in ["id", "timestamp", "src_ip", "protocol", "tcp_flags"] if c in packets_full.columns]
         display_df = packets_full[show_cols]
+        display_df = _display_ready(display_df, ts_cols=["timestamp"]) 
 
         event = st.dataframe(
             display_df,
@@ -604,9 +613,13 @@ with left:
             st.info("Flow 데이터를 만들 수 있는 컬럼(src_ip, dst_ip 등)이 부족합니다.")
         else:
             flow_display = flows_df.reset_index(drop=True)
+            flow_show_cols = [c for c in ["id", "first_seen", "src_ip", "protocol"] if c in flow_display.columns]
+            flow_view = flow_display[flow_show_cols].copy()
+            display_df = _display_ready(display_df, ts_cols=["timestamp"]) 
+
             flow_event = st.dataframe(
-                flow_display,
-                width='stretch',
+                flow_view,
+                use_container_width=True,
                 height=380,
                 hide_index=True,
                 on_select="rerun",
