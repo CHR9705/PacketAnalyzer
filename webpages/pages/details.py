@@ -1,21 +1,14 @@
-"""
-Packet Analyzer Dashboard - Streamlit UI
 
-DB 연동:
-    _dbsource.py 가 이 스크립트의 상위/조부모 폴더 어딘가에 있으면
-    (예: webpages/_dbsource.py, webpages/pages/packet_dashboard.py 구조)
-    load_packets()가 자동으로 찾아서 dbsource().fetch("packets") 로
-    실제 DB 데이터를 읽어옵니다.
-    _dbsource.py 의 DB_PATH 규칙(= _dbsource.py 위치의 상위 폴더/packets.db)에 맞게
-    packets.db 를 배치해주세요.
-    DB 연결에 실패하면 화면에 에러 메시지를 표시합니다 (mock 데이터로 대체하지 않음).
-
-실행:
-    streamlit run packet_dashboard.py
-"""
-
+import importlib
+import os
+import sys
+from pathlib import Path
 import pandas as pd
+import plotly.graph_objects as go
+import pycountry
 import streamlit as st
+from zoneinfo import ZoneInfo
+
 
 # ----------------------------------------------------------------------
 # 기본 설정
@@ -33,174 +26,12 @@ PROTOCOL_COLORS = {
 }
 DEFAULT_COLOR = {"bg": "#f3f4f6", "fg": "#6b7280", "accent": "#9ca3af"}
 
-CUSTOM_CSS = """
-<style>
-html, body, [class*="css"] {
-    font-size: 16px;
-}
-.metric-card {
-    background: #ffffff;
-    border: 1px solid #e6e8eb;
-    border-left: 4px solid #2f5bff;
-    border-radius: 10px;
-    padding: 14px 18px;
-    margin-bottom: 4px;
-}
-.metric-label {
-    font-size: 15px;
-    color: #6b7280;
-    margin-bottom: 4px;
-}
-.metric-value {
-    font-size: 30px;
-    font-weight: 700;
-    color: #2f5bff;
-}
-.section-title {
-    font-size: 22px;
-    font-weight: 700;
-    margin-top: 6px;
-    margin-bottom: 10px;
-}
-.detail-empty {
-    background: linear-gradient(135deg, #eef3ff 0%, #f5f0ff 100%);
-    border-radius: 12px;
-    padding: 24px;
-    color: #4f46e5;
-    font-size: 18px;
-    min-height: 120px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    text-align: center;
-}
-.detail-card {
-    background: #ffffff;
-    border: 1px solid #e6e8eb;
-    border-radius: 14px;
-    padding: 0;
-    overflow: hidden;
-    box-shadow: 0 2px 8px rgba(0,0,0,0.05);
-}
-.detail-header {
-    padding: 18px 24px;
-    color: #ffffff;
-    background: linear-gradient(135deg, var(--accent-a) 0%, var(--accent-b) 100%);
-}
-.detail-id-row {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    margin-bottom: 8px;
-}
-.detail-id {
-    font-size: 14px;
-    opacity: 0.85;
-    font-weight: 600;
-    letter-spacing: 0.5px;
-}
-.kind-badge {
-    display: inline-flex;
-    align-items: center;
-    gap: 5px;
-    padding: 4px 12px;
-    border-radius: 20px;
-    font-size: 13px;
-    font-weight: 800;
-    letter-spacing: 0.5px;
-    color: #ffffff;
-    text-transform: uppercase;
-}
-.kind-badge-packet {
-    background: #1d4ed8;
-}
-.kind-badge-flow {
-    background: #7c3aed;
-}
-.detail-flow-line {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    font-size: 19px;
-    font-weight: 700;
-    font-family: "SFMono-Regular", Consolas, monospace;
-    flex-wrap: wrap;
-}
-.detail-flow-arrow {
-    opacity: 0.8;
-    font-size: 18px;
-}
-.detail-body {
-    padding: 20px 24px 24px 24px;
-}
-.detail-group-title {
-    font-size: 14px;
-    font-weight: 700;
-    color: #6b7280;
-    margin: 18px 0 10px 0;
-    text-transform: uppercase;
-    letter-spacing: 0.5px;
-    display: flex;
-    align-items: center;
-    gap: 6px;
-}
-.detail-group-title:first-of-type {
-    margin-top: 0;
-}
-.detail-group {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    column-gap: 28px;
-}
-.detail-row {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    padding: 11px 0;
-    border-bottom: 1px solid #f0f1f3;
-}
-.detail-row:last-child {
-    border-bottom: none;
-}
-.detail-key {
-    font-size: 16px;
-    color: #6b7280;
-    font-weight: 500;
-}
-.detail-val {
-    font-size: 19px;
-    color: #1f2937;
-    font-weight: 700;
-    font-family: "SFMono-Regular", Consolas, monospace;
-    text-align: right;
-}
-.badge {
-    display: inline-block;
-    padding: 5px 16px;
-    border-radius: 20px;
-    font-size: 15px;
-    font-weight: 700;
-    font-family: inherit;
-}
-.badge-flag-empty { background: #f3f4f6; color: #9ca3af; }
-.badge-ttl { background: #f5f0ff; color: #7c3aed; }
-.detail-raw {
-    background: #0f172a;
-    color: #67e8f9;
-    font-family: "SFMono-Regular", Consolas, monospace;
-    font-size: 13.5px;
-    padding: 14px 16px;
-    border-radius: 10px;
-    max-height: 160px;
-    overflow: auto;
-    word-break: break-all;
-    line-height: 1.6;
-}
-hr {
-    margin: 8px 0 18px 0;
-}
-</style>
-"""
+css_path = Path(__file__).resolve().parent.parent
+
+if str(css_path) not in sys.path:
+    sys.path.insert(0, str(css_path))
+from css.st_header import CUSTOM_CSS
+
 st.markdown(CUSTOM_CSS, unsafe_allow_html=True)
 
 
@@ -254,7 +85,7 @@ def render_detail(row: pd.Series, kind: str = "packet") -> str:
     proto_badge = badge(proto, colors["bg"], colors["fg"])
     flag_badge = badge(d.get("tcp_flags", ""), "#eef2ff", "#4f46e5")
 
-    ts_display = _format_ts(d.get("timestamp"))
+    ts_display = _format_ts(d.get("timestamp")) if kind == "packet" else _format_ts(d.get("first_seen"))
     src_ip = d.get("src_ip", "-")
     dst_ip = d.get("dst_ip", "-")
     src_port = d.get("src_port")
@@ -323,65 +154,71 @@ def render_detail(row: pd.Series, kind: str = "packet") -> str:
     return _flatten_html(html)
 
 
-
 # ----------------------------------------------------------------------
 # 실제 DB 로더 (_dbsource.py 연동)
 # ----------------------------------------------------------------------
-def _import_dbsource():
-    """
-    이 스크립트 자신 / 부모 / 조부모 폴더까지 뒤져서
-    _dbsource.py (또는 dbsource.py) 를 찾아 import 합니다.
-
-    예) webpages/_dbsource.py 를 webpages/pages/packet_dashboard.py 에서 사용하는 구조
-    """
-    import importlib
-    import os
-    import sys
-
+def _import_project_module(candidates: list[str]):
     here = os.path.dirname(os.path.abspath(__file__))
-    candidate_dirs = [here, os.path.dirname(here), os.path.dirname(os.path.dirname(here))]
+    search_dirs = [here, os.path.dirname(here), os.path.dirname(os.path.dirname(here))]
 
     last_error = None
-    for d in candidate_dirs:
+    for d in search_dirs:
         if d and d not in sys.path:
             sys.path.insert(0, d)
-        for module_name in ("_dbsource", "dbsource"):
+        for module_name in candidates:
             try:
-                module = importlib.import_module(module_name)
-                return module.dbsource
+                return importlib.import_module(module_name)
             except ModuleNotFoundError as e:
                 last_error = e
                 continue
-    raise last_error or ModuleNotFoundError("_dbsource 모듈을 찾을 수 없습니다.")
+    raise last_error or ModuleNotFoundError(f"{candidates} 모듈을 찾을 수 없습니다.")
 
+
+_dbsource_mod = _import_project_module(["_dbsource", "dbsource"])
+_geoprocess_mod = _import_project_module(["_geoprocess", "geoprocess"])
+
+dbsource = _dbsource_mod.dbsource
+build_index = _geoprocess_mod.build_index
+lookup_ips = _geoprocess_mod.lookup_ips
+STATUS_LABELS = _geoprocess_mod.STATUS_LABELS
+ANOMALOUS_SOURCE_STATUSES = _geoprocess_mod.ANOMALOUS_SOURCE_STATUSES
+
+
+KST = ZoneInfo("Asia/Seoul")
 
 def _parse_timestamp_column(series: pd.Series) -> pd.Series:
     """
     timestamp 컬럼이 문자열(ISO 포맷 등)이면 그대로 파싱하고,
     숫자(유닉스 타임스탬프)면 자릿수를 보고 s/ms/us/ns 단위를 자동 판별해서 변환한다.
-    (숫자를 무작정 ns로 해석하면 1970년 근처로 잘못 나오는 문제를 방지)
+    DB의 시간은 UTC 기준이므로, 이를 UTC로 명시적으로 localize한 뒤
+    Asia/Seoul(KST)로 변환한다.
     """
     if pd.api.types.is_numeric_dtype(series):
         sample = series.dropna()
         if sample.empty:
-            return pd.to_datetime(series, errors="coerce")
-        magnitude = abs(float(sample.iloc[0]))
-        if magnitude >= 1e17:
-            unit = "ns"
-        elif magnitude >= 1e14:
-            unit = "us"
-        elif magnitude >= 1e11:
-            unit = "ms"
+            parsed = pd.to_datetime(series, errors="coerce")
         else:
-            unit = "s"
-        return pd.to_datetime(series, unit=unit, errors="coerce")
-    return pd.to_datetime(series, errors="coerce")
+            magnitude = abs(float(sample.iloc[0]))
+            if magnitude >= 1e17:
+                unit = "ns"
+            elif magnitude >= 1e14:
+                unit = "us"
+            elif magnitude >= 1e11:
+                unit = "ms"
+            else:
+                unit = "s"
+            parsed = pd.to_datetime(series, unit=unit, errors="coerce")
+    else:
+        parsed = pd.to_datetime(series, errors="coerce")
+
+    # UTC로 명시적으로 지정 후 KST로 변환 (naive면 UTC로 간주)
+    if parsed.dt.tz is None:
+        parsed = parsed.dt.tz_localize("UTC")
+    return parsed.dt.tz_convert(KST)
 
 
 def _load_from_db() -> pd.DataFrame:
-    dbsource_cls = _import_dbsource()
-
-    db = dbsource_cls()
+    db = dbsource()
     rows = db.fetch("packets")
     if not rows:
         raise ValueError("packets 테이블에 데이터가 없습니다.")
@@ -404,7 +241,7 @@ def load_packets() -> pd.DataFrame:
 
 
 def build_flows(df: pd.DataFrame) -> pd.DataFrame:
-    """DB 컬럼 유무에 따라 유연하게 flow(5-tuple 기준) 집계"""
+    """5-tuple 중 src_port는 그룹핑에서 제외 (묶지 않음), 대신 표시용으로만 보여줌"""
     group_cols = [c for c in ["src_ip", "dst_ip", "src_port", "dst_port", "protocol"] if c in df.columns]
     if not group_cols:
         return pd.DataFrame()
@@ -412,6 +249,7 @@ def build_flows(df: pd.DataFrame) -> pd.DataFrame:
     agg_kwargs = {}
     count_base = "id" if "id" in df.columns else group_cols[0]
     agg_kwargs["packet_count"] = (count_base, "count")
+
     if "packet_size" in df.columns:
         agg_kwargs["total_bytes"] = ("packet_size", "sum")
     if "timestamp" in df.columns:
@@ -420,9 +258,163 @@ def build_flows(df: pd.DataFrame) -> pd.DataFrame:
     if "protocol" not in group_cols and "protocol" in df.columns:
         agg_kwargs["protocol"] = ("protocol", "first")
 
+    # src_port는 묶지는 않되, 표시용으로 종류 수 / 대표값을 뽑음
+    if "src_port" in df.columns:
+        agg_kwargs["src_port_count"] = ("src_port", "nunique")
+        agg_kwargs["src_port_sample"] = ("src_port", "first")
+
     flow = df.groupby(group_cols, dropna=False).agg(**agg_kwargs).reset_index()
     flow.insert(0, "id", range(1, len(flow) + 1))
+
+    # 화면 표시용 Src Port 컬럼 만들기 (여러 개면 "n개", 하나면 그 값)
+    if "src_port_count" in flow.columns:
+        flow["src_port"] = flow.apply(
+            lambda r: str(r["src_port_sample"]) if r["src_port_count"] <= 1
+            else f'{r["src_port_sample"]} 외 {int(r["src_port_count"]) - 1}개',
+            axis=1,
+        )
+        flow = flow.drop(columns=["src_port_count", "src_port_sample"])
+        
+        
+
     return flow
+# ============================================================================
+# Geo 조회 (ipcountry.py 로직 이식) — packets_df에서 파생된 IP 목록만 사용
+# ============================================================================
+
+def get_geo_index():
+    """ipv4.csv / countries.csv 기반 조회 인덱스. 무거운 작업이라 앱 당 한 번만 생성."""
+    return build_index()
+
+
+
+def load_geo_data(ip_tuple: tuple) -> pd.DataFrame:
+    """IP 목록 -> status/국가/위경도가 붙은 DataFrame. packets_df에서 파생된 IP만 입력으로 받는다."""
+    index = get_geo_index()
+    return lookup_ips(index, list(ip_tuple))
+
+
+def _safe_iso3(iso2):
+    try:
+        return pycountry.countries.get(alpha_2=iso2).alpha_3
+    except (LookupError, AttributeError):
+        return None
+
+
+def px_dark_palette(n: int) -> list[str]:
+    """다크 배경에서 잘 보이는 채도 높은 팔레트를 순환시켜 반환."""
+    base = [
+        "#3b82f6", "#ef4444", "#10b981", "#f59e0b", "#8b5cf6",
+        "#06b6d4", "#ec4899", "#84cc16", "#f97316", "#14b8a6",
+    ]
+    return [base[i % len(base)] for i in range(n)]
+
+
+def build_geo_figures(ok_df: pd.DataFrame):
+    """공인 IP(ok 상태)만으로 국가별 집계 + 코로플레스 지도 / 도넛 차트를 생성 (다크 테마)."""
+    count_df = (
+        ok_df.groupby(["country_code", "country_name", "latitude", "longitude"])
+        .size()
+        .reset_index(name="count")
+        .sort_values("count", ascending=False)
+        .reset_index(drop=True)
+    )
+    count_df["iso3_code"] = count_df["country_code"].apply(_safe_iso3)
+
+    fig_geo = go.Figure(
+        data=go.Choropleth(
+            locations=count_df["iso3_code"],
+            locationmode="ISO-3",
+            z=count_df["count"],
+            text=count_df["country_name"],
+            colorscale=[
+                [0.0, "#1e293b"],
+                [0.3, "#7f1d1d"],
+                [0.6, "#b91c1c"],
+                [1.0, "#ef4444"],
+            ],
+            marker_line_color="rgba(15,23,42,0.9)",
+            marker_line_width=0.5,
+            colorbar=dict(
+                title=dict(text="Packets", side="top", font=dict(color="#94a3b8")),
+                thickness=10,
+                len=0.28,
+                outlinewidth=0,
+                orientation="v",
+                x=0.02,
+                xanchor="left",
+                y=0.04,
+                yanchor="bottom",
+                tickfont=dict(color="#94a3b8"),
+            ),
+            hovertemplate="<b>%{text}</b><br>Packets: %{z:,}<extra></extra>",
+        )
+    )
+    fig_geo.update_geos(
+        showframe=False,
+        showcoastlines=False,
+        lataxis_range=[-58, 85],
+        domain=dict(x=[0, 0.9], y=[0, 1]),
+        projection_type="equirectangular",
+        showland=True,
+        landcolor="#1e293b",
+        showocean=True,
+        oceancolor="#0b1120",
+        showcountries=True,
+        countrycolor="rgba(148,163,184,0.25)",
+        bgcolor="rgba(0,0,0,0)",
+    )
+    fig_geo.update_layout(
+        margin=dict(l=0, r=0, t=0, b=0),
+        height=460,
+        paper_bgcolor="rgba(0,0,0,0)",
+        plot_bgcolor="rgba(0,0,0,0)",
+        font=dict(family="Inter, sans-serif", size=12, color="#e5e7eb"),
+    )
+
+    pie_df = count_df[["country_name", "count"]].copy()
+    total_count = pie_df["count"].sum()
+    pie_df["ratio"] = pie_df["count"] / total_count
+
+    major_df = pie_df[pie_df["ratio"] >= 0.01]
+    minor_sum = pie_df[pie_df["ratio"] < 0.01]["count"].sum()
+
+    if minor_sum > 0:
+        pie_df = pd.concat(
+            [
+                major_df[["country_name", "count"]],
+                pd.DataFrame([{"country_name": "Others", "count": minor_sum}]),
+            ],
+            ignore_index=True,
+        )
+    else:
+        pie_df = major_df[["country_name", "count"]]
+
+    fig_pie = go.Figure(
+        data=go.Pie(
+            labels=pie_df["country_name"],
+            values=pie_df["count"],
+            hole=0.55,
+            marker=dict(
+                colors=px_dark_palette(len(pie_df)),
+                line=dict(color="#0b1120", width=2),
+            ),
+            textinfo="none",
+            hovertemplate="<b>%{label}</b><br>%{value:,}건 (%{percent})<extra></extra>",
+        )
+    )
+    fig_pie.update_layout(
+        title=dict(text="Top Countries", font=dict(size=13, color="#e5e7eb")),
+        margin=dict(l=0, r=0, t=30, b=0),
+        height=460,
+        showlegend=True,
+        legend=dict(orientation="v", font=dict(size=11, color="#cbd5e1")),
+        paper_bgcolor="rgba(0,0,0,0)",
+        plot_bgcolor="rgba(0,0,0,0)",
+        font=dict(family="Inter, sans-serif", color="#e5e7eb"),
+    )
+
+    return fig_geo, fig_pie, count_df
 
 
 # ----------------------------------------------------------------------
@@ -498,23 +490,80 @@ filtered = packets_df.copy()
 
 st.caption(f"Packets : {len(filtered):,} | Flows : {TOTAL_FLOWS:,}")
 
+# 지도 piechart ui 
+if "src_ip" not in packets_df.columns:
+    st.info("src_ip 컬럼이 없어 지도를 표시할 수 없습니다.")
+else:
+    geo_ip_tuple = tuple(packets_df["src_ip"].dropna().tolist())
+    geo_df = load_geo_data(geo_ip_tuple)
+    geo_df["status_label"] = geo_df["status"].map(STATUS_LABELS).fillna(geo_df["status"])
+
+    ok_df = geo_df[geo_df["status"] == "ok"]
+    private_df = geo_df[geo_df["status"] == "private"]
+    anomalous_df = geo_df[geo_df["status"].isin(ANOMALOUS_SOURCE_STATUSES)]
+
+    if ok_df.empty:
+        st.info("지도에 표시할 IP 위치 정보가 없습니다.")
+    else:
+        fig_geo, fig_pie, count_df = build_geo_figures(ok_df)
+
+        col_map, col_pie = st.columns([3, 1], gap="small")
+        with col_map:
+            st.plotly_chart(fig_geo, width="stretch", config={"displayModeBar": False})
+        with col_pie:
+            st.plotly_chart(fig_pie, width="stretch", config={"displayModeBar": False})
+
+    st.markdown(
+        f'<div class="geo-note">🏠 사설 IP {len(private_df):,}건 · '
+        f'⚠️ 비정상 출발지(멀티캐스트/예약대역) {len(anomalous_df):,}건</div>',
+        unsafe_allow_html=True,
+    )
+
+
 st.markdown("<hr/>", unsafe_allow_html=True)
 
 # ----------------------------------------------------------------------
 # Traffic Monitor  (Packets / Flows 탭 + Detail 패널)
 # ----------------------------------------------------------------------
-st.markdown('<div class="section-title">📦 Traffic Monitor</div>', unsafe_allow_html=True)
+title_col, refresh_col = st.columns([8, 1])
+with title_col:
+    def _clear_selection_state(*keys):
+        """key 자체를 삭제해서 위젯이 선택 없는 상태로 완전히 초기화되게 함"""
+        for k in keys:
+            if k in st.session_state:
+                del st.session_state[k]
+
+title_col, refresh_col = st.columns([8, 1])
+with title_col:
+    if "packets_key_ver" not in st.session_state:
+        st.session_state.packets_key_ver = 0
+    if "flows_key_ver" not in st.session_state:
+        st.session_state.flows_key_ver = 0
+    if "prev_packets_sel" not in st.session_state:
+        st.session_state.prev_packets_sel = ()
+    if "prev_flows_sel" not in st.session_state:
+        st.session_state.prev_flows_sel = ()
+
+title_col, refresh_col = st.columns([8, 1])
+with title_col:
+    st.markdown('<div class="section-title">📦 Traffic Monitor</div>', unsafe_allow_html=True)
+with refresh_col:
+    if st.button("🔄 새로고침", use_container_width=True):
+        load_packets.clear()
+        st.session_state.packets_key_ver += 1   # 위젯 key 변경 -> 완전히 새로 마운트 -> 체크 해제
+        st.session_state.flows_key_ver += 1
+        st.session_state.prev_packets_sel = ()
+        st.session_state.prev_flows_sel = ()
+        st.rerun()
 
 left, right = st.columns([1, 1])
 
-# ---- 탭 간 선택 상호배타 처리 (한쪽 선택 시 반대쪽 자동 해제) ----
-if "prev_packets_sel" not in st.session_state:
-    st.session_state.prev_packets_sel = ()
-if "prev_flows_sel" not in st.session_state:
-    st.session_state.prev_flows_sel = ()
+packets_key = f"packets_table_{st.session_state.packets_key_ver}"
+flows_key = f"flows_table_{st.session_state.flows_key_ver}"
 
-_packets_state = st.session_state.get("packets_table")
-_flows_state = st.session_state.get("flows_table")
+# ---- 탭 간 선택 상호배타 처리 ----
+_packets_state = st.session_state.get(packets_key)
+_flows_state = st.session_state.get(flows_key)
 
 _packets_rows_now = tuple(_packets_state["selection"]["rows"]) if _packets_state else ()
 _flows_rows_now = tuple(_flows_state["selection"]["rows"]) if _flows_state else ()
@@ -523,9 +572,14 @@ _packets_changed = _packets_rows_now != st.session_state.prev_packets_sel
 _flows_changed = _flows_rows_now != st.session_state.prev_flows_sel
 
 if _packets_changed and _packets_rows_now:
-    st.session_state["flows_table"] = {"selection": {"rows": [], "columns": []}}
+    # flows 쪽 key를 바꿔서 완전히 새 위젯으로 -> 체크 확실히 풀림
+    st.session_state.flows_key_ver += 1
+    flows_key = f"flows_table_{st.session_state.flows_key_ver}"
+    _flows_rows_now = ()
 elif _flows_changed and _flows_rows_now:
-    st.session_state["packets_table"] = {"selection": {"rows": [], "columns": []}}
+    st.session_state.packets_key_ver += 1
+    packets_key = f"packets_table_{st.session_state.packets_key_ver}"
+    _packets_rows_now = ()
 
 selected_rows = []
 selected_df = pd.DataFrame()
@@ -541,12 +595,12 @@ with left:
 
         event = st.dataframe(
             display_df,
-            width='stretch',
+            use_container_width=True,
             height=380,
             hide_index=True,
             on_select="rerun",
             selection_mode="single-row",
-            key="packets_table",
+            key=packets_key,
         )
         if event is not None and event.selection.rows:
             selected_rows = event.selection.rows
@@ -560,28 +614,27 @@ with left:
             flow_display = flows_df.reset_index(drop=True)
             flow_event = st.dataframe(
                 flow_display,
-                width='stretch',
+                use_container_width=True,
                 height=380,
                 hide_index=True,
                 on_select="rerun",
                 selection_mode="single-row",
-                key="flows_table",
+                key=flows_key,
             )
             if flow_event is not None and flow_event.selection.rows:
                 selected_rows = flow_event.selection.rows
                 selected_df = flow_display
                 selected_kind = "flow"
 
-# 이번 런의 최종 선택 상태를 다음 비교용으로 저장
 st.session_state.prev_packets_sel = tuple(
-    st.session_state.get("packets_table", {}).get("selection", {}).get("rows", [])
+    st.session_state.get(packets_key, {}).get("selection", {}).get("rows", [])
 )
 st.session_state.prev_flows_sel = tuple(
-    st.session_state.get("flows_table", {}).get("selection", {}).get("rows", [])
+    st.session_state.get(flows_key, {}).get("selection", {}).get("rows", [])
 )
 
 with right:
-    st.markdown('<div class="section-title">📄 상세정보 </div>', unsafe_allow_html=True)
+    st.markdown('<div class="section-title">📄 Detail</div>', unsafe_allow_html=True)
     if selected_rows:
         row = selected_df.iloc[selected_rows[0]]
         st.markdown(render_detail(row, kind=selected_kind), unsafe_allow_html=True)
