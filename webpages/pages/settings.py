@@ -3,6 +3,7 @@ import sqlite3
 import pandas as pd
 import os
 import time
+import ipaddress
 from contextlib import closing
 
 
@@ -11,7 +12,15 @@ DB_PATH = os.path.normpath(os.path.join(BASE_DIR, "..", "..", "packets.db"))
 
 BLACKLIST_TABLE = "black_list"         
 WHITELIST_TABLE = "white_list"        
-IP_COLUMN = "ip"                    
+IP_COLUMN = "ip" 
+
+def is_valid_ip(ip: str) -> bool:
+    try:
+        ipaddress.ip_address(ip)
+        return True
+    except ValueError:
+        return False
+
 
 
 def get_connection():
@@ -44,8 +53,10 @@ def search_ip(ip: str):
 def add_to_blacklist(ip: str, accepted: bool = False):
     try:
         conn = get_shared_connection()
-        existing = conn.execute("SELECT 1 FROM black_list WHERE ip = ? LIMIT 1", (ip,)).fetchone()
+        existing = conn.execute("SELECT accepted FROM black_list WHERE ip = ? LIMIT 1", (ip,)).fetchone()
         if existing:
+            if existing[0] == 2:
+                return False, "차단해제로 등록된 IP입니다."
             return False, "이미 블랙리스트에 등록된 IP입니다."
         conn.execute(
             "INSERT INTO black_list (timestamp, ip, accepted) VALUES (?, ?, ?)",
@@ -58,9 +69,11 @@ def add_to_blacklist(ip: str, accepted: bool = False):
 def add_to_whitelist(ip: str, accepted: bool = False):
     try:
         conn = get_shared_connection()
-        existing = conn.execute ("SELECT 1 FROM white_list WHERE ip = ? LIMIT 1",(ip,)).fetchone()
+        existing = conn.execute("SELECT accepted FROM white_list WHERE ip = ? LIMIT 1", (ip,)).fetchone()
         if existing:
-            return False, "이미 화이트리스트에 등록된 IP입니다"
+            if existing[0] == 2:
+                return False, "화이트리스트해제로 등록된 IP입니다."
+            return False, "이미 화이트리스트에 등록된 IP입니다."
         conn.execute(
             "INSERT INTO white_list (timestamp, ip, accepted) VALUES (?, ?, ?)",
             (time.time(), ip, 1 if accepted else 0),
@@ -150,23 +163,22 @@ def do_search(ip_value: str):
 # ---- Top row: search icon | IP input | block button | whitelist button ----
 outer_search_col, outer_action_col = st.columns([4, 2.7])
  
-with outer_search_col:
-    with st.form(key="search_form", clear_on_submit=False, border=False):
-        col_input, col_search  = st.columns([3, 0.7])
-        with col_search:
-            search_clicked = st.form_submit_button("🔍", use_container_width=True)
-        with col_input:
-            ip_input = st.text_input(
-                "IP", key="ip_value", label_visibility="collapsed", placeholder="IP"
-            )
+with st.form(key="search_form", clear_on_submit=False, border=False):
+    col_input, col_search, col_block, col_white = st.columns([3, 0.7, 1.1, 1.6])
+    
+    with col_search:
+        search_clicked = st.form_submit_button("🔍", width=300)
  
-with outer_action_col:
-    col_block, col_white = st.columns([1.1, 1.6])
+    with col_input:
+        ip_input = st.text_input(
+            "IP", key="ip_value", label_visibility="collapsed", placeholder="IP"
+        )
+ 
     with col_block:
-        block_clicked = st.button("차단", use_container_width=True)
-    with col_white:
-        whitelist_clicked = st.button("화이트리스트로 추가", use_container_width=True)
+        block_clicked = st.form_submit_button("차단", width=100)
  
+    with col_white:
+        whitelist_clicked = st.form_submit_button("화이트리스트로 추가", width=200)
 # ---- Handle search ----
 if search_clicked:
     do_search(ip_input)
@@ -187,6 +199,8 @@ elif status == "both":
 if block_clicked:
     if not ip_input.strip():
         st.markdown('<div class="error-text">차단할 IP를 입력해주세요.</div>', unsafe_allow_html=True)
+    elif not is_valid_ip(ip_input.strip()):
+        st.markdown('<div class="error-text">올바른 IP 형식이 아닙니다.</div>', unsafe_allow_html=True)
     else:
         ok, err = add_to_blacklist(ip_input.strip())
         if ok:
@@ -197,6 +211,8 @@ if block_clicked:
 if whitelist_clicked:
     if not ip_input.strip():
         st.markdown('<div class="error-text">추가할 IP를 입력해주세요.</div>', unsafe_allow_html=True)
+    elif not is_valid_ip(ip_input.strip()):
+        st.markdown('<div class="error-text">올바른 IP 형식이 아닙니다.</div>', unsafe_allow_html=True)
     else:
         ok, err = add_to_whitelist(ip_input.strip())
         if ok:

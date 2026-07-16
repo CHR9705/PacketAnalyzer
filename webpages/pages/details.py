@@ -1,25 +1,14 @@
-"""
-Packet Analyzer Dashboard - Streamlit UI
 
-DB 연동:
-    _dbsource.py 가 이 스크립트의 상위/조부모 폴더 어딘가에 있으면
-    (예: webpages/_dbsource.py, webpages/pages/packet_dashboard.py 구조)
-    load_packets()가 자동으로 찾아서 dbsource().fetch("packets") 로
-    실제 DB 데이터를 읽어옵니다.
-    _dbsource.py 의 DB_PATH 규칙(= _dbsource.py 위치의 상위 폴더/packets.db)에 맞게
-    packets.db 를 배치해주세요.
-    DB 연결에 실패하면 화면에 에러 메시지를 표시합니다 (mock 데이터로 대체하지 않음).
-
-실행:
-    streamlit run packet_dashboard.py
-"""
-
-import pandas as pd
-import streamlit as st
 import importlib
 import os
 import sys
+from pathlib import Path
+import pandas as pd
+import plotly.graph_objects as go
+import pycountry
+import streamlit as st
 from zoneinfo import ZoneInfo
+from webpages.functions.titles  import get_h2
 
 
 # ----------------------------------------------------------------------
@@ -38,175 +27,15 @@ PROTOCOL_COLORS = {
 }
 DEFAULT_COLOR = {"bg": "#f3f4f6", "fg": "#6b7280", "accent": "#9ca3af"}
 
-CUSTOM_CSS = """
-<style>
-html, body, [class*="css"] {
-    font-size: 16px;
-}
-.metric-card {
-    background: #ffffff;
-    border: 1px solid #e6e8eb;
-    border-left: 4px solid #2f5bff;
-    border-radius: 10px;
-    padding: 14px 18px;
-    margin-bottom: 4px;
-}
-.metric-label {
-    font-size: 15px;
-    color: #6b7280;
-    margin-bottom: 4px;
-}
-.metric-value {
-    font-size: 30px;
-    font-weight: 700;
-    color: #2f5bff;
-}
-.section-title {
-    font-size: 22px;
-    font-weight: 700;
-    margin-top: 6px;
-    margin-bottom: 10px;
-}
-.detail-empty {
-    background: linear-gradient(135deg, #eef3ff 0%, #f5f0ff 100%);
-    border-radius: 12px;
-    padding: 24px;
-    color: #4f46e5;
-    font-size: 18px;
-    min-height: 120px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    text-align: center;
-}
-.detail-card {
-    background: #ffffff;
-    border: 1px solid #e6e8eb;
-    border-radius: 14px;
-    padding: 0;
-    overflow: hidden;
-    box-shadow: 0 2px 8px rgba(0,0,0,0.05);
-}
-.detail-header {
-    padding: 18px 24px;
-    color: #ffffff;
-    background: linear-gradient(135deg, var(--accent-a) 0%, var(--accent-b) 100%);
-}
-.detail-id-row {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    margin-bottom: 8px;
-}
-.detail-id {
-    font-size: 14px;
-    opacity: 0.85;
-    font-weight: 600;
-    letter-spacing: 0.5px;
-}
-.kind-badge {
-    display: inline-flex;
-    align-items: center;
-    gap: 5px;
-    padding: 4px 12px;
-    border-radius: 20px;
-    font-size: 13px;
-    font-weight: 800;
-    letter-spacing: 0.5px;
-    color: #ffffff;
-    text-transform: uppercase;
-}
-.kind-badge-packet {
-    background: #1d4ed8;
-}
-.kind-badge-flow {
-    background: #7c3aed;
-}
-.detail-flow-line {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    font-size: 19px;
-    font-weight: 700;
-    font-family: "SFMono-Regular", Consolas, monospace;
-    flex-wrap: wrap;
-}
-.detail-flow-arrow {
-    opacity: 0.8;
-    font-size: 18px;
-}
-.detail-body {
-    padding: 20px 24px 24px 24px;
-}
-.detail-group-title {
-    font-size: 14px;
-    font-weight: 700;
-    color: #6b7280;
-    margin: 18px 0 10px 0;
-    text-transform: uppercase;
-    letter-spacing: 0.5px;
-    display: flex;
-    align-items: center;
-    gap: 6px;
-}
-.detail-group-title:first-of-type {
-    margin-top: 0;
-}
-.detail-group {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    column-gap: 28px;
-}
-.detail-row {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    padding: 11px 0;
-    border-bottom: 1px solid #f0f1f3;
-}
-.detail-row:last-child {
-    border-bottom: none;
-}
-.detail-key {
-    font-size: 16px;
-    color: #6b7280;
-    font-weight: 500;
-}
-.detail-val {
-    font-size: 19px;
-    color: #1f2937;
-    font-weight: 700;
-    font-family: "SFMono-Regular", Consolas, monospace;
-    text-align: right;
-}
-.badge {
-    display: inline-block;
-    padding: 5px 16px;
-    border-radius: 20px;
-    font-size: 15px;
-    font-weight: 700;
-    font-family: inherit;
-}
-.badge-flag-empty { background: #f3f4f6; color: #9ca3af; }
-.badge-ttl { background: #f5f0ff; color: #7c3aed; }
-.detail-raw {
-    background: #0f172a;
-    color: #67e8f9;
-    font-family: "SFMono-Regular", Consolas, monospace;
-    font-size: 13.5px;
-    padding: 14px 16px;
-    border-radius: 10px;
-    max-height: 160px;
-    overflow: auto;
-    word-break: break-all;
-    line-height: 1.6;
-}
-hr {
-    margin: 8px 0 18px 0;
-}
-</style>
-"""
-st.markdown(CUSTOM_CSS, unsafe_allow_html=True)
+from  webpages.css.st_header import _setting
+from  webpages.css.st_metric import metric_cards, detail_card_styles
+from  webpages.css.st_alertbox import alret_box_style
+
+_setting()
+metric_cards()
+alret_box_style()
+detail_card_styles()
+
 
 
 def _protocol_color(proto: str) -> dict:
@@ -241,6 +70,7 @@ def _display_ready(df: pd.DataFrame, ts_cols: list[str]) -> pd.DataFrame:
     return df
 
 
+
 def render_detail(row: pd.Series, kind: str = "packet") -> str:
     """선택된 packet/flow row를 컴팩트한 2열 카드 HTML로 렌더링"""
     d = row.to_dict()
@@ -272,13 +102,13 @@ def render_detail(row: pd.Series, kind: str = "packet") -> str:
     dst_ip = d.get("dst_ip", "-")
     src_port = d.get("src_port")
     dst_port = d.get("dst_port")
-    src_label = f"{src_ip}:{src_port}" if src_port not in (None, "", "nan") else f"{src_ip}"
-    dst_label = f"{dst_ip}:{dst_port}" if dst_port not in (None, "", "nan") else f"{dst_ip}"
+    src_label = f"{src_ip}   :   {src_port}" if src_port not in (None, "", "nan") else f"{src_ip}"
+    dst_label = f"{dst_ip}   :   {dst_port}" if dst_port not in (None, "", "nan") else f"{dst_ip}"
 
     header = f"""
     <div class="detail-header" style="--accent-a:{colors['accent']}; --accent-b:{colors['accent']}cc;">
         <div class="detail-id-row">
-            <span class="detail-id">#{d.get('id', '-')} · {ts_display}</span>
+            <span class="detail-id">#{d.get('id', '-')}</span>
             {kind_badge}
         </div>
         <div class="detail-flow-line">
@@ -335,34 +165,34 @@ def render_detail(row: pd.Series, kind: str = "packet") -> str:
     """
     return _flatten_html(html)
 
-
 # ----------------------------------------------------------------------
 # 실제 DB 로더 (_dbsource.py 연동)
 # ----------------------------------------------------------------------
-def _import_dbsource():
-    """
-    이 스크립트 자신 / 부모 / 조부모 폴더까지 뒤져서
-    _dbsource.py (또는 dbsource.py) 를 찾아 import 합니다.
-
-    예) webpages/_dbsource.py 를 webpages/pages/packet_dashboard.py 에서 사용하는 구조
-    """
-    
-
+def _import_project_module(candidates: list[str]):
     here = os.path.dirname(os.path.abspath(__file__))
-    candidate_dirs = [here, os.path.dirname(here), os.path.dirname(os.path.dirname(here))]
+    search_dirs = [here, os.path.dirname(here), os.path.dirname(os.path.dirname(here))]
 
     last_error = None
-    for d in candidate_dirs:
+    for d in search_dirs:
         if d and d not in sys.path:
             sys.path.insert(0, d)
-        for module_name in ("_dbsource", "dbsource"):
+        for module_name in candidates:
             try:
-                module = importlib.import_module(module_name)
-                return module.dbsource
+                return importlib.import_module(module_name)
             except ModuleNotFoundError as e:
                 last_error = e
                 continue
-    raise last_error or ModuleNotFoundError("_dbsource 모듈을 찾을 수 없습니다.")
+    raise last_error or ModuleNotFoundError(f"{candidates} 모듈을 찾을 수 없습니다.")
+
+
+_dbsource_mod = _import_project_module(["_dbsource", "dbsource"])
+_geoprocess_mod = _import_project_module(["_geoprocess", "geoprocess"])
+
+dbsource = _dbsource_mod.dbsource
+build_index = _geoprocess_mod.build_index
+lookup_ips = _geoprocess_mod.lookup_ips
+STATUS_LABELS = _geoprocess_mod.STATUS_LABELS
+ANOMALOUS_SOURCE_STATUSES = _geoprocess_mod.ANOMALOUS_SOURCE_STATUSES
 
 
 KST = ZoneInfo("Asia/Seoul")
@@ -399,9 +229,7 @@ def _parse_timestamp_column(series: pd.Series) -> pd.Series:
 
 
 def _load_from_db() -> pd.DataFrame:
-    dbsource_cls = _import_dbsource()
-
-    db = dbsource_cls()
+    db = dbsource()
     rows = db.fetch("packets")
     if not rows:
         raise ValueError("packets 테이블에 데이터가 없습니다.")
@@ -461,6 +289,143 @@ def build_flows(df: pd.DataFrame) -> pd.DataFrame:
         
 
     return flow
+# ============================================================================
+# Geo 조회 (ipcountry.py 로직 이식) — packets_df에서 파생된 IP 목록만 사용
+# ============================================================================
+
+def get_geo_index():
+    """ipv4.csv / countries.csv 기반 조회 인덱스. 무거운 작업이라 앱 당 한 번만 생성."""
+    return build_index()
+
+
+
+def load_geo_data(ip_tuple: tuple) -> pd.DataFrame:
+    """IP 목록 -> status/국가/위경도가 붙은 DataFrame. packets_df에서 파생된 IP만 입력으로 받는다."""
+    index = get_geo_index()
+    return lookup_ips(index, list(ip_tuple))
+
+
+def _safe_iso3(iso2):
+    try:
+        return pycountry.countries.get(alpha_2=iso2).alpha_3
+    except (LookupError, AttributeError):
+        return None
+
+
+def px_dark_palette(n: int) -> list[str]:
+    """다크 배경에서 잘 보이는 채도 높은 팔레트를 순환시켜 반환."""
+    base = [
+        "#3b82f6", "#ef4444", "#10b981", "#f59e0b", "#8b5cf6",
+        "#06b6d4", "#ec4899", "#84cc16", "#f97316", "#14b8a6",
+    ]
+    return [base[i % len(base)] for i in range(n)]
+
+
+def build_geo_figures(ok_df: pd.DataFrame):
+    """공인 IP(ok 상태)만으로 국가별 집계 + 코로플레스 지도 / 도넛 차트를 생성 (다크 테마)."""
+    count_df = (
+        ok_df.groupby(["country_code", "country_name", "latitude", "longitude"])
+        .size()
+        .reset_index(name="count")
+        .sort_values("count", ascending=False)
+        .reset_index(drop=True)
+    )
+    count_df["iso3_code"] = count_df["country_code"].apply(_safe_iso3)
+
+    fig_geo = go.Figure(
+        data=go.Choropleth(
+            locations=count_df["iso3_code"],
+            locationmode="ISO-3",
+            z=count_df["count"],
+            text=count_df["country_name"],
+            colorscale=[
+                [0.0, "#1e293b"],
+                [0.3, "#7f1d1d"],
+                [0.6, "#b91c1c"],
+                [1.0, "#ef4444"],
+            ],
+            marker_line_color="rgba(15,23,42,0.9)",
+            marker_line_width=0.5,
+            colorbar=dict(
+                title=dict(text="Packets", side="top", font=dict(color="#94a3b8")),
+                thickness=10,
+                len=0.28,
+                outlinewidth=0,
+                orientation="v",
+                x=0.02,
+                xanchor="left",
+                y=0.04,
+                yanchor="bottom",
+                tickfont=dict(color="#94a3b8"),
+            ),
+            hovertemplate="<b>%{text}</b><br>Packets: %{z:,}<extra></extra>",
+        )
+    )
+    fig_geo.update_geos(
+        showframe=False,
+        showcoastlines=False,
+        lataxis_range=[-58, 85],
+        domain=dict(x=[0, 0.9], y=[0, 1]),
+        projection_type="equirectangular",
+        showland=True,
+        landcolor="#1e293b",
+        showocean=True,
+        oceancolor="#0b1120",
+        showcountries=True,
+        countrycolor="rgba(148,163,184,0.25)",
+        bgcolor="rgba(0,0,0,0)",
+    )
+    fig_geo.update_layout(
+        margin=dict(l=0, r=0, t=0, b=0),
+        height=460,
+        paper_bgcolor="rgba(0,0,0,0)",
+        plot_bgcolor="rgba(0,0,0,0)",
+        font=dict(family="Inter, sans-serif", size=12, color="#e5e7eb"),
+    )
+
+    pie_df = count_df[["country_name", "count"]].copy()
+    total_count = pie_df["count"].sum()
+    pie_df["ratio"] = pie_df["count"] / total_count
+
+    major_df = pie_df[pie_df["ratio"] >= 0.01]
+    minor_sum = pie_df[pie_df["ratio"] < 0.01]["count"].sum()
+
+    if minor_sum > 0:
+        pie_df = pd.concat(
+            [
+                major_df[["country_name", "count"]],
+                pd.DataFrame([{"country_name": "Others", "count": minor_sum}]),
+            ],
+            ignore_index=True,
+        )
+    else:
+        pie_df = major_df[["country_name", "count"]]
+
+    fig_pie = go.Figure(
+        data=go.Pie(
+            labels=pie_df["country_name"],
+            values=pie_df["count"],
+            hole=0.55,
+            marker=dict(
+                colors=px_dark_palette(len(pie_df)),
+                line=dict(color="#0b1120", width=2),
+            ),
+            textinfo="none",
+            hovertemplate="<b>%{label}</b><br>%{value:,}건 (%{percent})<extra></extra>",
+        )
+    )
+    fig_pie.update_layout(
+        title=dict(text="Top Countries", font=dict(size=13, color="#e5e7eb")),
+        margin=dict(l=0, r=0, t=30, b=0),
+        height=460,
+        showlegend=True,
+        legend=dict(orientation="v", font=dict(size=11, color="#cbd5e1")),
+        paper_bgcolor="rgba(0,0,0,0)",
+        plot_bgcolor="rgba(0,0,0,0)",
+        font=dict(family="Inter, sans-serif", color="#e5e7eb"),
+    )
+
+    return fig_geo, fig_pie, count_df
 
 
 # ----------------------------------------------------------------------
@@ -501,13 +466,10 @@ card_data = [
 ]
 for col, label, value in card_data:
     with col:
-        st.markdown(
-            f"""<div class="metric-card">
-                    <div class="metric-label">{label}</div>
-                    <div class="metric-value">{value}</div>
-                </div>""",
-            unsafe_allow_html=True,
-        )
+        st.metric(
+            label,
+            value)
+                
 
 st.markdown("<hr/>", unsafe_allow_html=True)
 
@@ -516,25 +478,48 @@ st.markdown("<hr/>", unsafe_allow_html=True)
 # ----------------------------------------------------------------------
 s1, s2 = st.columns(2)
 with s1:
-    st.markdown(
-        f"""<div class="metric-card">
-                <div class="metric-label">평균 Packet 크기</div>
-                <div class="metric-value">{AVG_PACKET_SIZE:.1f} B</div>
-            </div>""",
-        unsafe_allow_html=True,
+    st.metric(
+        "평균 Packet 크기",
+        f"{AVG_PACKET_SIZE:.1f}"
     )
 with s2:
-    st.markdown(
-        f"""<div class="metric-card">
-                <div class="metric-label">평균 Flow Packets</div>
-                <div class="metric-value">{AVG_FLOW_PACKETS:.1f}</div>
-            </div>""",
-        unsafe_allow_html=True,
+    st.metric(
+        "평균 Flow Packets",
+        f"{AVG_FLOW_PACKETS:.1f}"
     )
 
 filtered = packets_df.copy()
 
-st.caption(f"Packets : {len(filtered):,} | Flows : {TOTAL_FLOWS:,}")
+
+# 지도 piechart ui 
+if "src_ip" not in packets_df.columns:
+    st.info("src_ip 컬럼이 없어 지도를 표시할 수 없습니다.")
+else:
+    geo_ip_tuple = tuple(packets_df["src_ip"].dropna().tolist())
+    geo_df = load_geo_data(geo_ip_tuple)
+    geo_df["status_label"] = geo_df["status"].map(STATUS_LABELS).fillna(geo_df["status"])
+
+    ok_df = geo_df[geo_df["status"] == "ok"]
+    private_df = geo_df[geo_df["status"] == "private"]
+    anomalous_df = geo_df[geo_df["status"].isin(ANOMALOUS_SOURCE_STATUSES)]
+
+    if ok_df.empty:
+        st.info("지도에 표시할 IP 위치 정보가 없습니다.")
+    else:
+        fig_geo, fig_pie, count_df = build_geo_figures(ok_df)
+
+        col_map, col_pie = st.columns([3, 1], gap="small")
+        with col_map:
+            st.plotly_chart(fig_geo, width="stretch", config={"displayModeBar": False})
+        with col_pie:
+            st.plotly_chart(fig_pie, width="stretch", config={"displayModeBar": False})
+
+    st.markdown(
+        f'<div class="geo-note">🏠 사설 IP {len(private_df):,}건 · '
+        f'⚠️ 비정상 출발지(멀티캐스트/예약대역) {len(anomalous_df):,}건</div>',
+        unsafe_allow_html=True,
+    )
+
 
 st.markdown("<hr/>", unsafe_allow_html=True)
 
@@ -562,9 +547,9 @@ with title_col:
 
 title_col, refresh_col = st.columns([8, 1])
 with title_col:
-    st.markdown('<div class="section-title">📦 Traffic Monitor</div>', unsafe_allow_html=True)
+    st.markdown(get_h2("📦 Traffic Monitor"), unsafe_allow_html=True)
 with refresh_col:
-    if st.button("🔄 새로고침", use_container_width=True):
+    if st.button("🔄 새로고침", width='stretch'):
         load_packets.clear()
         st.session_state.packets_key_ver += 1   # 위젯 key 변경 -> 완전히 새로 마운트 -> 체크 해제
         st.session_state.flows_key_ver += 1
@@ -641,7 +626,7 @@ with left:
                 on_select="rerun",
                 selection_mode="single-row",
                 key=flows_key,
-        )
+            )
             if flow_event is not None and flow_event.selection.rows:
                 selected_rows = flow_event.selection.rows
                 selected_df = flow_display
