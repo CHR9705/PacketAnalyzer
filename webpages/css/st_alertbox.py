@@ -5,22 +5,23 @@ def alret_box_style():
     st.markdown("""
     <style>
     .alert-div {
-        border:1px solid #ff6969;
+        border:1px solid #E5484D;
         border-radius:10px;
-        padding:6px 10px;
-        margin-bottom:4px;
+        padding:8px 12px;
+        margin-bottom:6px;
         display:grid;
         grid-template-columns: 2fr 2fr 2fr 1fr;
         align-items:center;
         font-size:14px;
-        color:#DC2626;
-        background-color:rgba(255, 133, 133,0.1);
+        color:#FF6B6B;
+        background-color:rgba(229, 72, 77, 0.07);
     }
-    
+
     .alert-cnt-span{
         display:inline-block;
-        min-width:10px;
-        padding:2px 8px;
+        justify-self:end;
+        min-width:36px;
+        padding:2px 10px;
         text-align:center;
         background:#DC2626;
         color:white;

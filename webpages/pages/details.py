@@ -11,6 +11,9 @@ from zoneinfo import ZoneInfo
 from webpages.functions.titles  import get_h2
 
 
+from webpages.css.st_header import _setting
+from webpages.css.st_glass import liquid_glass
+
 # ----------------------------------------------------------------------
 # 기본 설정
 # ----------------------------------------------------------------------
@@ -20,22 +23,58 @@ st.set_page_config(
     layout="wide",
 )
 
-PROTOCOL_COLORS = {
-    "TCP": {"bg": "#e6f0ff", "fg": "#2f5bff", "accent": "#2f5bff"},
-    "UDP": {"bg": "#fff1e0", "fg": "#d97706", "accent": "#d97706"},
-    "ICMP": {"bg": "#e6fbf1", "fg": "#059669", "accent": "#059669"},
-}
-DEFAULT_COLOR = {"bg": "#f3f4f6", "fg": "#6b7280", "accent": "#9ca3af"}
+_setting()
+liquid_glass()
 
-from  webpages.css.st_header import _setting
+PROTOCOL_COLORS = {
+    "TCP": {"bg": "rgba(59, 130, 246, 0.18)", "fg": "#8AB4FF", "accent": "#2f5bff"},
+    "UDP": {"bg": "rgba(217, 119, 6, 0.18)", "fg": "#FBBF24", "accent": "#d97706"},
+    "ICMP": {"bg": "rgba(5, 150, 105, 0.18)", "fg": "#34D399", "accent": "#059669"},
+}
+DEFAULT_COLOR = {"bg": "rgba(255, 255, 255, 0.08)", "fg": "#9CA3AF", "accent": "#6b7280"}
+
 from  webpages.css.st_metric import metric_cards, detail_card_styles
 from  webpages.css.st_alertbox import alret_box_style
 
-_setting()
 metric_cards()
 alret_box_style()
 detail_card_styles()
 
+# detail_card_styles()가 정의하지 않는 보조 요소 스타일
+st.markdown("""
+<style>
+html, body, [class*="css"] {
+    font-size: 16px;
+}
+.section-title {
+    font-size: 22px;
+    font-weight: 700;
+    margin-top: 6px;
+    margin-bottom: 10px;
+}
+.detail-empty {
+    background: rgba(255, 255, 255, 0.05);
+    backdrop-filter: blur(24px) saturate(160%);
+    -webkit-backdrop-filter: blur(24px) saturate(160%);
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    border-radius: 20px;
+    padding: 24px;
+    color: #A8B3C1;
+    font-size: 18px;
+    min-height: 120px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.18);
+}
+.geo-note {
+    color: #A8B3C1;
+    font-size: 14px;
+    margin-top: 6px;
+}
+</style>
+""", unsafe_allow_html=True)
 
 
 def _protocol_color(proto: str) -> dict:
@@ -95,7 +134,7 @@ def render_detail(row: pd.Series, kind: str = "packet") -> str:
     proto = d.get("protocol", "-")
     colors = _protocol_color(proto)
     proto_badge = badge(proto, colors["bg"], colors["fg"])
-    flag_badge = badge(d.get("tcp_flags", ""), "#eef2ff", "#4f46e5")
+    flag_badge = badge(d.get("tcp_flags", ""), "rgba(99, 102, 241, 0.18)", "#A5B4FC")
 
     ts_display = _format_ts(d.get("timestamp")) if kind == "packet" else _format_ts(d.get("first_seen"))
     src_ip = d.get("src_ip", "-")

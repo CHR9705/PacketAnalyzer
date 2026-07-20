@@ -4,17 +4,19 @@ class WarningManager:
     def __init__(self):
         self.cache = {}
     
-    def add_warning(self, timestamp, src_ip, attack_type):
+    def add_warning(self, timestamp, src_ip, attack_type, score=0):
         key = (src_ip, attack_type)
 
         if key not in self.cache:
             self.cache[key] = {
                 "timestamp": timestamp,
-                "counter": 1
+                "counter": 1,
+                "score": score
             }
         else:
             self.cache[key]["counter"] += 1
             self.cache[key]["timestamp"] = timestamp
+            self.cache[key]["score"] = score
 
     def flush(self, db):
 
@@ -24,7 +26,8 @@ class WarningManager:
                 data["timestamp"],
                 src_ip,
                 attack_type,
-                data["counter"]
+                data["counter"],
+                data["score"]
             )
 
         self.cache.clear()

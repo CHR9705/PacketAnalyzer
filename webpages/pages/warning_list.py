@@ -9,6 +9,12 @@ import streamlit as st
 
 st.set_page_config(layout="wide", page_title="네트워크 공격 탐지 대시보드")
 
+from webpages.css.st_header import _setting
+from webpages.css.st_glass import liquid_glass
+
+_setting()
+liquid_glass()
+
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 DB_PATH = os.path.normpath(os.path.join(BASE_DIR, "..", "..", "packets.db"))
 
@@ -49,19 +55,18 @@ st.markdown(
     <style>
     :root {
         --color-bg: #0e1117;
-        --color-card-bg: #1c1f26;
-        --color-border: #333844;
+        --color-card-bg: rgba(255, 255, 255, 0.06);
+        --color-border: rgba(255, 255, 255, 0.14);
         --color-text-primary: #e6e6e6;
         --color-text-secondary: #9aa0a6;
         --radius-md: 8px;
-        --radius-lg: 12px;
-        --shadow-sm: 0 1px 3px rgba(0,0,0,0.4);
+        --radius-lg: 20px;
+        --shadow-sm: 0 8px 32px rgba(0,0,0,0.35), inset 0 1px 0 rgba(255,255,255,0.18);
         --space-2: 8px;
         --space-3: 16px;
         --space-4: 24px;
     }
     .stApp {
-        background-color: var(--color-bg);
         color: var(--color-text-primary);
     }
     h1 {
@@ -161,6 +166,8 @@ def field_grid_html(pairs, grade_color) -> str:
         "<div style='border:1px solid var(--color-border); border-left:4px solid "
         f"{grade_color}; border-radius:var(--radius-lg); padding:20px var(--space-4); "
         "background-color:var(--color-card-bg); box-shadow:var(--shadow-sm); "
+        "backdrop-filter:blur(24px) saturate(160%); "
+        "-webkit-backdrop-filter:blur(24px) saturate(160%); "
         "display:grid; grid-template-columns:1fr 1fr; "
         f"gap:var(--space-3) var(--space-4);'>{cells}</div>"
     )

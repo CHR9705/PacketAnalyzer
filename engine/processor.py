@@ -7,6 +7,7 @@ from .flow_manager import FlowManager
 from .detector_loader import load_detectors
 from .warning_manager import WarningManager
 from .db.dbmodule import DBModule
+from engine.iptables import _rule_exists
 
 import time
 
@@ -76,13 +77,21 @@ class PacketProcessor:
         last_flush = time.time()
         while True:
             raw_packet = self.packet_queue.get()
-            
+
             packet = self.process_packet(raw_packet)
             
             if packet is None:
                 continue
 
             if packet.dst_port == 22 or packet.src_port == 22:
+                continue
+
+            # 패킷 src ip가 차단이 되어있으면 blocked_packet에다 넣고 컨티뉴한다.
+            if _rule_exists(packet.src_ip, "DROP"):
+                self.db_module.insert_blocked_table(
+                    packet.timestamp, packet.src_ip, packet.dst_ip, 
+                    packet.src_port, packet.dst_port, packet.protocol, 
+                    packet.packet_size, packet.payload_size, packet.tcp_flags)
                 continue
 
             context = self.flow_manager.update(packet)
@@ -99,6 +108,8 @@ class PacketProcessor:
             except Exception as e :
                 print(e)
             
+            if _rule_exists(packet.src_ip, "ACCEPT"):
+                continue
 
             for detect in self.detectors:
                 raw_result = detect(context.packet, context.flow)

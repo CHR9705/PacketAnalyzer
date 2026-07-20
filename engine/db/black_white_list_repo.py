@@ -34,6 +34,13 @@ class BlackWhiteRepo:
             INSERT INTO black_list (timestamp, ip, accepted)
             VALUES (?, ?, ?)
         ''', (time.time(), ip, 1 if accepted == True else 0))
+
+    def get_rules(self, table:str):
+        self.db.cursor.execute(f"""
+            SELECT id, ip
+            FROM {table}
+        """)
+        return self.db.cursor.fetchall()
     
     def get_pending_rules(self, table: str):
         self.db.cursor.execute(f"""

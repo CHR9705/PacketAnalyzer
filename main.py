@@ -3,7 +3,7 @@ from threading import Thread
 
 from engine.packet_capture import PacketCapture
 from engine.processor import PacketProcessor
-from engine.discord.dm_main import run_bot   
+from engine.discord.dm_main import run_bot
 from engine.firewall_worker import FirewallWorker
 
 
@@ -25,23 +25,24 @@ processor_thread = Thread(
     daemon=True
 )
 
-bot_thread = Thread(         
+
+bot_thread = Thread(
     target=run_bot,
     daemon=True
 )
 
-firewall_thread = Thread(         
+firewall_thread = Thread(
     target = firewall.run,
     daemon=True
 )
 
 capture_thread.start()
 processor_thread.start()
-bot_thread.start() 
+bot_thread.start()
 firewall_thread.start()
 
 capture_thread.join()
 processor_thread.join()
-bot_thread.join()  
-firewall_thread.join()  
+bot_thread.join()
+firewall_thread.join()
 

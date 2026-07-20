@@ -10,17 +10,19 @@ class WarningRepo:
                 last_timestamp INTEGER,
                 src_ip TEXT,
                 attack_type TEXT,
-                counter INTEGER
+                counter INTEGER DEFAULT 0,
+                score REAL DEFAULT 0.0
             );
         ''')
     
-    def insert_warning_table(self, timestamp, src_ip, attack_type, counter):
+    def insert_warning_table(self, timestamp, src_ip, attack_type, counter, score=0):
         current_timestamp = timestamp
         self.db.cursor.execute("""
             UPDATE warnings
             SET
                 counter = counter + ?,
-                last_timestamp = ?
+                last_timestamp = ?,
+                score = ?
             WHERE
                 src_ip = ?
                 AND attack_type = ?
@@ -28,6 +30,7 @@ class WarningRepo:
         """, (
             counter,
             current_timestamp,
+            score,
             src_ip,
             attack_type,
             current_timestamp - 10
@@ -40,7 +43,8 @@ class WarningRepo:
                     last_timestamp,
                     src_ip,
                     attack_type,
-                    counter
+                    counter,
+                    score
                 )
                 VALUES (?, ?, ?, ?, ?)
             """, (
@@ -48,6 +52,7 @@ class WarningRepo:
                 current_timestamp,
                 src_ip,
                 attack_type,
-                counter
+                counter,
+                score
             ))
         self.db.conn.commit()
