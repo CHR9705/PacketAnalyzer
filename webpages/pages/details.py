@@ -620,7 +620,7 @@ with left:
 
             flow_event = st.dataframe(
                 flow_view,
-                use_container_width=True,
+                width="stretch",
                 height=380,
                 hide_index=True,
                 on_select="rerun",
