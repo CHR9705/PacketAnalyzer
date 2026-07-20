@@ -380,36 +380,36 @@ with voice_col2:
 # ========================================================
 # 🧪 [테스트 전용] 완벽히 연동되는 가상 공격 트리거 버튼
 # ========================================================
-st.sidebar.subheader("🧪 TTS 알람 테스트 베드")
+# st.sidebar.subheader("🧪 TTS 알람 테스트 베드")
 
-# 테스트하고 싶은 공격 유형 선택박스
-test_attack = st.sidebar.selectbox(
-    "테스트할 공격 선택", ["syn flood", "port scan", "ddos", "sql injection"]
-)
+# # 테스트하고 싶은 공격 유형 선택박스
+# test_attack = st.sidebar.selectbox(
+#     "테스트할 공격 선택", ["syn flood", "port scan", "ddos", "sql injection"]
+# )
 
-# 트리거 작동 버튼
-if st.sidebar.button("🚨 가상 공격 트리거 (테스트)"):
-    import pandas as pd
+# # 트리거 작동 버튼
+# if st.sidebar.button("🚨 가상 공격 트리거 (테스트)"):
+#     import pandas as pd
 
-    # 1. 현재 시각 타임스탬프(epoch) 생성
-    current_time_epoch = time.time()
+#     # 1. 현재 시각 타임스탬프(epoch) 생성
+#     current_time_epoch = time.time()
 
-    # 2. 가상 경고 데이터 행 생성
-    new_row = pd.DataFrame(
-        {"last_timestamp": [current_time_epoch], "attack_type": [test_attack]}
-    )
+#     # 2. 가상 경고 데이터 행 생성
+#     new_row = pd.DataFrame(
+#         {"last_timestamp": [current_time_epoch], "attack_type": [test_attack]}
+#     )
 
-    # 3. 세션 상태(st.session_state)에 가상 데이터 영구 보존 및 병합
-    if "mock_warnings" not in st.session_state:
-        st.session_state.mock_warnings = pd.concat(
-            [new_row, warnings], ignore_index=True
-        )
-    else:
-        st.session_state.mock_warnings = pd.concat(
-            [new_row, st.session_state.mock_warnings], ignore_index=True
-        )
+#     # 3. 세션 상태(st.session_state)에 가상 데이터 영구 보존 및 병합
+#     if "mock_warnings" not in st.session_state:
+#         st.session_state.mock_warnings = pd.concat(
+#             [new_row, warnings], ignore_index=True
+#         )
+#     else:
+#         st.session_state.mock_warnings = pd.concat(
+#             [new_row, st.session_state.mock_warnings], ignore_index=True
+#         )
 
-    # 4. 주입 성공 메시지 출력 후 화면을 즉시 강제 새로고침(rerun)
-    st.sidebar.success(f"'{test_attack}' 데이터 주입 성공!")
-    st.rerun()
+#     # 4. 주입 성공 메시지 출력 후 화면을 즉시 강제 새로고침(rerun)
+#     st.sidebar.success(f"'{test_attack}' 데이터 주입 성공!")
+#     st.rerun()
 
