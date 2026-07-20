@@ -1,7 +1,5 @@
 import sqlite3
 import time
-kst = timezone(timedelta(hours=9))
-
 from datetime import datetime, timedelta, timezone
 import pandas as pd
 import plotly.express as px
@@ -176,24 +174,32 @@ def check_new_warning():
 
             components.html(
                 f"""
-                <audio id="speedy-alert-audio" autoplay style="display:none;">
-                    <source src="data:audio/mp3;base64,{b64_audio}" type="audio/mp3">
-                </audio>
                 <script>
-                    const audio = document.getElementById("speedy-alert-audio");
+                (function() {{
+                    const doc = window.parent.document;
+                    const old = doc.getElementById("speedy-alert-audio");
+                    if (old) {{ old.remove(); }}
+
+                    const audio = doc.createElement("audio");
+                    audio.id = "speedy-alert-audio";
+                    audio.autoplay = true;
+                    audio.style.display = "none";
+                    audio.src = "data:audio/mp3;base64,{b64_audio}";
+                    doc.body.appendChild(audio);
 
                     function applySpeed() {{
                         audio.playbackRate = {speed_factor};
                         audio.preservesPitch = false;
                     }}
-
                     audio.addEventListener("loadedmetadata", applySpeed);
                     audio.addEventListener("canplay", applySpeed);
                     audio.addEventListener("play", applySpeed);
-
                     audio.play().then(applySpeed).catch((e) => console.log("autoplay blocked:", e));
                     setTimeout(applySpeed, 100);
                     setTimeout(applySpeed, 300);
+
+                    audio.addEventListener("ended", () => audio.remove());
+                }})();
                 </script>
                 """,
                 height=0,
@@ -434,9 +440,9 @@ with voice_col2:
         st.session_state.alert_voice_gender = "male"
         st.rerun()
 
-# ========================================================
-# 🧪 [테스트 전용] 완벽히 연동되는 가상 공격 트리거 버튼
-# ========================================================
+# # ========================================================
+# # 🧪 [테스트 전용] 완벽히 연동되는 가상 공격 트리거 버튼
+# # ========================================================
 # st.sidebar.subheader("🧪 TTS 알람 테스트 베드")
 
 # # 테스트하고 싶은 공격 유형 선택박스
