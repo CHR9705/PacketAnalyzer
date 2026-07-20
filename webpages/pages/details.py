@@ -493,7 +493,6 @@ def px_dark_palette(n: int) -> list[str]:
 
 
 def build_geo_figures(ok_df: pd.DataFrame):
-    """공인 IP(ok 상태)만으로 국가별 집계 + 코로플레스 지도 / 도넛 차트를 생성 (다크 테마)."""
     count_df = (
         ok_df.groupby(["country_code", "country_name", "latitude", "longitude"])
         .size()
