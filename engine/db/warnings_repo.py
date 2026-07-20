@@ -66,7 +66,7 @@ class WarningRepo:
         now = time.time()
         self.db.cursor.execute("""
                 SELECT counter from warnings
-                where src_ip = ? AND attack_type = ? AND last_time >= ?
+                where src_ip = ? AND attack_type = ? AND last_timestamp >= ?
             """, (ip, attack_type, now -10))
         return self.db.cursor.fetchall()
     
@@ -77,6 +77,6 @@ class WarningRepo:
         now = time.time()
         self.db.cursor.execute("""
                 SELECT counter from warnings
-                where attack_type = ? AND last_time >= ?
+                where attack_type = ? AND last_timestamp >= ?
             """, (attack_type, now - 10))
         return self.db.cursor.fetchall()
