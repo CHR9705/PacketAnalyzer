@@ -1,3 +1,5 @@
+import time
+
 class WarningRepo:
     def __init__(self, db_module):
         self.db = db_module
@@ -57,9 +59,24 @@ class WarningRepo:
             ))
         self.db.conn.commit()
     
-    def get_warning_table_by_ip(self, ip):
+    def get_warning_counter(self, attack_type, ip):
+        """
+        10초 이내에 마지막 경보가 일어난 경고를 검색해서 counter 반환
+        """
+        now = time.time()
         self.db.cursor.execute("""
-                SELECT * from warnings
-                where src_ip = ?
-            """, (ip,))
+                SELECT counter from warnings
+                where src_ip = ? AND attack_type = ? AND last_time >= ?
+            """, (ip, attack_type, now -10))
+        return self.db.cursor.fetchall()
+    
+    def get_warning_counter_by_attacktype(self, attack_type):
+        """
+        10초 이내에 마지막 경보가 일어난 경고를 검색해서 counter 반환
+        """
+        now = time.time()
+        self.db.cursor.execute("""
+                SELECT counter from warnings
+                where attack_type = ? AND last_time >= ?
+            """, (attack_type, now - 10))
         return self.db.cursor.fetchall()
