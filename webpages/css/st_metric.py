@@ -4,6 +4,7 @@ def metric_cards():
     st.markdown("""
 <style>
 /* metric 전체 박스 - 리퀴드 글라스 */
+.metric-card,
 [data-testid="stMetric"] {
     position: relative;
     overflow: hidden;
@@ -21,6 +22,7 @@ def metric_cards():
 }
 
 /* 유리 표면 반사광 (위쪽이 밝은 스펙큘러 하이라이트) */
+.metric-card:before,
 [data-testid="stMetric"]::before {
     content: "";
     position: absolute;
@@ -35,11 +37,12 @@ def metric_cards():
 }
 
 /* 제목(Label) */
+.metric-label,
 [data-testid="stMetricLabel"] {
     color: #A8B3C1;
     margin-bottom: 4px;
 }
-
+.metric-label p,
 [data-testid="stMetricLabel"] p {
     font-size: 14px;
     letter-spacing: 0.08em;
@@ -47,6 +50,7 @@ def metric_cards():
 }
 
 /* 숫자(Value) */
+.metric-value,
 [data-testid="stMetricValue"] {
     font-size: 34px;
     font-weight: 800;
@@ -54,6 +58,7 @@ def metric_cards():
 }
 
 /* 변화량(Delta) */
+.metric-delta,
 [data-testid="stMetricDelta"] {
     font-size: 12px;
 }

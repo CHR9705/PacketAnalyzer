@@ -1,4 +1,5 @@
 import subprocess
+import platform
 
 
 def _rule_exists(ip: str, target: str) -> bool:
@@ -6,6 +7,9 @@ def _rule_exists(ip: str, target: str) -> bool:
     INPUT 체인에 해당 규칙이 존재하는지 확인한다.
     target : "DROP" 또는 "ACCEPT"
     """
+    if platform.system() != "Linux":
+        return
+
     result = subprocess.run(
         [
             "iptables",

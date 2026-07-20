@@ -1,5 +1,7 @@
 import sqlite3
 import time
+kst = timezone(timedelta(hours=9))
+
 from datetime import datetime, timedelta, timezone
 import pandas as pd
 import plotly.express as px
@@ -10,6 +12,8 @@ from webpages.css.st_header import _setting
 from webpages.css.st_metric import metric_cards
 from webpages.functions.titles import get_h2
 
+from webpages.functions.titles  import get_h2
+from webpages.functions.metric_html import  colored_metric
 import base64
 import io
 import time
@@ -72,6 +76,17 @@ FROM warnings
 """,
     conn,
 )
+
+blacklist_cnt = pd.read_sql_query("""
+SELECT count(*) as cnt
+FROM black_list
+""", conn)
+
+blocked_cnt = pd.read_sql_query("""
+SELECT count(*) as cnt
+FROM blocked_packets
+WHERE timestamp >= ?                                
+""", conn, params=(now - 60*60,))
 
 VOICE_MAP = {
     "female": "ko-KR-SunHiNeural",
@@ -193,6 +208,11 @@ metric_cards()
 liquid_glass()
 
 
+
+
+# packet_size 합계 (바이트 단위라고 가정)
+total_bytes = packets["packet_size"].sum()
+
 # 경고 탐지 로직 실행
 check_new_warning()
 
@@ -203,7 +223,40 @@ metric_cards()
 total_bytes = packets["packet_size"].sum()
 bps = (total_bytes * 8) / 60
 
+# 엔진 상태
+engine_status = "Running" if packets["timestamp"].max() + 5 > now else "Stopped"
+
+col, col1, col2, col3 = st.columns(4)
+
+red = "#DC2626"
+green = "#10B981"
+
+# with st.container(key = "nowtime-metric"):
+with col:
+    colored_metric("현재 시각", datetime.now().strftime('%Y-%m-%d %H:%M:%S'), 'white')
+
+
+
+with col1:
+    color = ""
+    if engine_status == "Running":
+        color = green
+    else:
+        color = red
+    colored_metric("엔진 상태", engine_status, color)
+
+with col2:
+    colored_metric("차단 IP 수", blacklist_cnt['cnt'].iloc[0], red)
+
+with col3:
+    colored_metric("1시간 이내 차단된 패킷 수", blocked_cnt['cnt'].iloc[0], red)
+
+
+
+
 col1, col2, col3, col4, col5 = st.columns(5)
+
+
 with col1:
     st.metric("분당 패킷 수", len(packets))
 with col2:
@@ -211,7 +264,8 @@ with col2:
 with col3:
     st.metric("BPS", f"{bps/1000:.1f} Kbps")
 with col4:
-    st.metric("Warnings", warnings_cnt["cnt"].iloc[0])
+    colored_metric("Warnings", warnings_cnt['cnt'].iloc[0], red)
+
 with col5:
     st.metric("활성 IP", packets["src_ip"].nunique() if not packets.empty else 0)
 
@@ -254,6 +308,9 @@ fig.update_layout(
 )
 
 st.plotly_chart(fig, width='stretch')
+
+
+
 
 left, right = st.columns(2)
 with left:
