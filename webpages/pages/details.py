@@ -9,8 +9,6 @@ import pycountry
 import streamlit as st
 from zoneinfo import ZoneInfo
 from webpages.functions.titles  import get_h2
-
-
 from webpages.css.st_header import _setting
 from webpages.css.st_glass import liquid_glass
 
@@ -31,7 +29,13 @@ PROTOCOL_COLORS = {
     "UDP": {"bg": "rgba(217, 119, 6, 0.18)", "fg": "#FBBF24", "accent": "#d97706"},
     "ICMP": {"bg": "rgba(5, 150, 105, 0.18)", "fg": "#34D399", "accent": "#059669"},
 }
-DEFAULT_COLOR = {"bg": "rgba(255, 255, 255, 0.08)", "fg": "#9CA3AF", "accent": "#6b7280"}
+DEFAULT_COLOR = {"bg": "#f3f4f6", "fg": "#6b7280", "accent": "#9ca3af"}
+
+# Detail 헤더 배경색: Packet/Flow 종류 기준
+KIND_ACCENT = {
+    "packet": "#3b82f6",  # 파랑
+    "flow": "#8b5cf6",    # 보라
+}
 
 from  webpages.css.st_metric import metric_cards, detail_card_styles
 from  webpages.css.st_alertbox import alret_box_style
@@ -40,6 +44,134 @@ metric_cards()
 alret_box_style()
 detail_card_styles()
 
+st.markdown(
+    """
+    <style>
+    /* 상단 5개 KPI 카드 중 앞쪽 2개(총 Packets, 총 Flows)만 강조 */
+    div[data-testid="stMetric"]:nth-of-type(1) [data-testid="stMetricValue"],
+    div[data-testid="stMetric"]:nth-of-type(2) [data-testid="stMetricValue"] {
+        color: #f87171 !important;
+    }
+    div[data-testid="stMetric"] [data-testid="stMetricValue"] {
+        font-family: "Inter", sans-serif;
+        font-weight: 700;
+        font-size: 20px !important;
+    }
+    div[data-testid="stMetric"] label {
+        letter-spacing: 0.3px;
+        opacity: 0.75;
+        font-size: 11px !important;
+    }
+    div[data-testid="stMetric"] {
+        padding: 10px 12px !important;
+    }
+
+    .geo-note-pills {
+        display: flex;
+        gap: 10px;
+        margin-top: 10px;
+        flex-wrap: wrap;
+    }
+    .geo-pill {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        padding: 6px 14px;
+        border-radius: 999px;
+        font-size: 13px;
+        font-family: "Inter", sans-serif;
+        font-weight: 600;
+    }
+    .geo-pill-info {
+        background: rgba(59,130,246,0.15);
+        color: #93c5fd;
+        border: 1px solid rgba(59,130,246,0.3);
+    }
+    .geo-pill-warn {
+        background: rgba(239,68,68,0.15);
+        color: #fca5a5;
+        border: 1px solid rgba(239,68,68,0.3);
+    }
+
+    hr {
+        border: none;
+        height: 1px;
+        background: linear-gradient(90deg, rgba(148,163,184,0) 0%, rgba(148,163,184,0.35) 50%, rgba(148,163,184,0) 100%);
+        margin: 20px 0;
+    }
+
+    div[data-testid="column"]:not(:first-child) {
+        border-left: 1px solid rgba(148,163,184,0.12);
+        padding-left: 20px !important;
+    }
+
+    /* Packets / Flows 탭 스타일 */
+    button[data-baseweb="tab"] {
+        font-family: "Inter", sans-serif;
+        font-size: 14px;
+        font-weight: 600;
+        color: #94a3b8 !important;
+    }
+    button[data-baseweb="tab"][aria-selected="true"] {
+        color: #f8fafc !important;
+    }
+    div[data-baseweb="tab-highlight"] {
+        background-color: #3b82f6 !important;
+        height: 2.5px !important;
+    }
+
+    /* 데이터프레임 헤더 */
+    div[data-testid="stDataFrame"] thead tr th {
+        background-color: rgba(148,163,184,0.06) !important;
+        color: #cbd5e1 !important;
+        font-family: "Inter", sans-serif;
+        font-weight: 700;
+        font-size: 12.5px;
+        letter-spacing: 0.3px;
+        text-transform: uppercase;
+    }
+
+    /* 새로고침 버튼 */
+    div[data-testid="stButton"] button {
+        border-radius: 8px;
+        border: 1px solid rgba(148,163,184,0.25);
+        background: rgba(148,163,184,0.06);
+        color: #e2e8f0;
+        font-weight: 600;
+        transition: all 0.15s ease;
+    }
+    div[data-testid="stButton"] button:hover {
+        border-color: #3b82f6;
+        color: #93c5fd;
+        background: rgba(59,130,246,0.1);
+    }
+
+    /* 아무것도 선택 안 됐을 때 안내 카드 보강 */
+    .detail-empty {
+        border: 1px dashed rgba(148,163,184,0.25) !important;
+        font-family: "Inter", sans-serif !important;
+    }
+    /* Streamlit 기본 요소 간 세로 간격 축소 (전체 페이지 공통) */
+    div[data-testid="stVerticalBlock"] {
+        gap: 0.5rem !important;
+    }
+    div[data-testid="stElementContainer"] {
+        margin-bottom: 0.4rem !important;
+    }
+
+    /* Detail 타이틀과 카드가 겹치지 않도록 최소 간격 보장 */
+    .section-title {
+        margin-bottom: 10px !important;
+        display: block;
+    }
+    /* 페이지 맨 아래 여백 복구 (Traffic Monitor / Detail 하단 잘림 방지) */
+    section.main > div.block-container {
+        padding-bottom: 3rem !important;
+    }
+    </style>
+    """,
+    unsafe_allow_html=True,
+)
 # detail_card_styles()가 정의하지 않는 보조 요소 스타일
 st.markdown("""
 <style>
@@ -132,9 +264,10 @@ def render_detail(row: pd.Series, kind: str = "packet") -> str:
         )
 
     proto = d.get("protocol", "-")
-    colors = _protocol_color(proto)
+    colors = _protocol_color(proto)          # 프로토콜 뱃지 색상용 (그대로 유지)
     proto_badge = badge(proto, colors["bg"], colors["fg"])
-    flag_badge = badge(d.get("tcp_flags", ""), "rgba(99, 102, 241, 0.18)", "#A5B4FC")
+    kind_accent = KIND_ACCENT.get(kind, DEFAULT_COLOR["accent"])   # 헤더 배경용 (새로 추가)
+    flag_badge = badge(d.get("tcp_flags", ""), "#eef2ff", "#4f46e5")
 
     ts_display = _format_ts(d.get("timestamp")) if kind == "packet" else _format_ts(d.get("first_seen"))
     src_ip = d.get("src_ip", "-")
@@ -145,7 +278,7 @@ def render_detail(row: pd.Series, kind: str = "packet") -> str:
     dst_label = f"{dst_ip}   :   {dst_port}" if dst_port not in (None, "", "nan") else f"{dst_ip}"
 
     header = f"""
-    <div class="detail-header" style="--accent-a:{colors['accent']}; --accent-b:{colors['accent']}cc;">
+    <div class="detail-header" style="--accent-a:{kind_accent}; --accent-b:{kind_accent}cc;">
         <div class="detail-id-row">
             <span class="detail-id">#{d.get('id', '-')}</span>
             {kind_badge}
@@ -281,7 +414,6 @@ def _load_from_db() -> pd.DataFrame:
     return df.sort_values("timestamp" if "timestamp" in df.columns else "id").reset_index(drop=True)
 
 
-@st.cache_data
 def load_packets() -> pd.DataFrame:
     """
     _dbsource.py를 통해 실제 DB에서 패킷을 가져옵니다.
@@ -376,15 +508,14 @@ def build_geo_figures(ok_df: pd.DataFrame):
             locationmode="ISO-3",
             z=count_df["count"],
             text=count_df["country_name"],
-            colorscale = [
-    [0.0, "#22c55e"],  # 선명한 초록 (안정)
-    [0.3, "#eab308"],  # 따뜻한 노랑 (주의)
-    [0.6, "#f97316"],  # 주황 (경고)
-    [1.0, "#ef4444"]   # 기존 마감 레드 (위험)
-],
-
-            marker_line_color="rgba(15,23,42,0.9)",
-            marker_line_width=0.5,
+            colorscale=[
+                [0.0, "#1e293b"],
+                [0.3, "#7f1d1d"],
+                [0.6, "#b91c1c"],
+                [1.0, "#ef4444"],
+            ],
+            marker_line_color="#f8fafc",
+            marker_line_width=1,
             colorbar=dict(
                 title=dict(text="Packets", side="top", font=dict(color="#94a3b8")),
                 thickness=10,
@@ -402,16 +533,20 @@ def build_geo_figures(ok_df: pd.DataFrame):
     )
     fig_geo.update_geos(
         showframe=False,
-        showcoastlines=False,
+        showcoastlines=True,
+        coastlinecolor="rgba(148,163,184,0.35)",
+        coastlinewidth=0.6,
         lataxis_range=[-58, 85],
         domain=dict(x=[0, 0.9], y=[0, 1]),
         projection_type="equirectangular",
         showland=True,
         landcolor="#1e293b",
         showocean=True,
-        oceancolor="#0b1120",
+        oceancolor="#0a0f1c",
+        showlakes=True,
+        lakecolor="#0a0f1c",
         showcountries=True,
-        countrycolor="rgba(148,163,184,0.25)",
+        countrycolor="rgba(148,163,184,0.3)",
         bgcolor="rgba(0,0,0,0)",
     )
     fig_geo.update_layout(
@@ -444,21 +579,32 @@ def build_geo_figures(ok_df: pd.DataFrame):
         data=go.Pie(
             labels=pie_df["country_name"],
             values=pie_df["count"],
-            hole=0.55,
+            hole=0.6,
+            pull=[0.02] * len(pie_df),
             marker=dict(
                 colors=px_dark_palette(len(pie_df)),
-                line=dict(color="#0b1120", width=2),
+                line=dict(color="#0f172a", width=3),
             ),
             textinfo="none",
             hovertemplate="<b>%{label}</b><br>%{value:,}건 (%{percent})<extra></extra>",
         )
     )
     fig_pie.update_layout(
-        title=dict(text="국가별 순위", font=dict(size=15, color="#e5e7eb")),
-        margin=dict(l=0, r=0, t=30, b=0),
+        title=dict(
+            text="Top Countries",
+            font=dict(size=14, color="#f1f5f9", family="Inter, sans-serif"),
+            x=0.05,
+        ),
+        margin=dict(l=0, r=0, t=36, b=0),
         height=460,
         showlegend=True,
-        legend=dict(orientation="v", font=dict(size=11, color="#cbd5e1")),
+        legend=dict(
+            orientation="v",
+            font=dict(size=12, color="#e2e8f0", family="Inter, sans-serif"),
+            itemwidth=40,
+            traceorder="normal",
+            bgcolor="rgba(0,0,0,0)",
+        ),
         paper_bgcolor="rgba(0,0,0,0)",
         plot_bgcolor="rgba(0,0,0,0)",
         font=dict(family="Inter, sans-serif", color="#e5e7eb"),
@@ -470,8 +616,19 @@ def build_geo_figures(ok_df: pd.DataFrame):
 # ----------------------------------------------------------------------
 # Header
 # ----------------------------------------------------------------------
-st.markdown("## 🛡️ 상세정보")
-
+st.markdown(
+    """
+    <div style="display:flex; align-items:center; gap:10px; margin-bottom:2px;">
+        <span style="font-size:26px;">🛡️</span>
+        <span style="font-size:26px; font-weight:800; font-family:'Inter', sans-serif; color:#f8fafc; letter-spacing:-0.3px;">상세정보</span>
+    </div>
+    """,
+    unsafe_allow_html=True,
+)
+st.markdown(
+    '<div style="font-size:13px; color:#94a3b8; font-family:\'Inter\', sans-serif; letter-spacing:0.3px; margin-bottom:14px;">Real-Time Network Traffic Monitoring</div>',
+    unsafe_allow_html=True,
+)
 
 try:
     packets_df = load_packets()
@@ -554,8 +711,10 @@ else:
             st.plotly_chart(fig_pie, width="stretch", config={"displayModeBar": False})
 
     st.markdown(
-        f'<div class="geo-note">🏠 사설 IP {len(private_df):,}건 · '
-        f'⚠️ 비정상 출발지(멀티캐스트/예약대역) {len(anomalous_df):,}건</div>',
+        f'<div class="geo-note-pills">'
+        f'<span class="geo-pill geo-pill-info">🏠 사설 IP {len(private_df):,}건</span>'
+        f'<span class="geo-pill geo-pill-warn">⚠️ 비정상 출발지(멀티캐스트/예약대역) {len(anomalous_df):,}건</span>'
+        f'</div>',
         unsafe_allow_html=True,
     )
 
@@ -573,24 +732,21 @@ with title_col:
             if k in st.session_state:
                 del st.session_state[k]
 
-title_col, refresh_col = st.columns([8, 1])
-with title_col:
-    if "packets_key_ver" not in st.session_state:
-        st.session_state.packets_key_ver = 0
-    if "flows_key_ver" not in st.session_state:
-        st.session_state.flows_key_ver = 0
-    if "prev_packets_sel" not in st.session_state:
-        st.session_state.prev_packets_sel = ()
-    if "prev_flows_sel" not in st.session_state:
-        st.session_state.prev_flows_sel = ()
+if "packets_key_ver" not in st.session_state:
+    st.session_state.packets_key_ver = 0
+if "flows_key_ver" not in st.session_state:
+    st.session_state.flows_key_ver = 0
+if "prev_packets_sel" not in st.session_state:
+    st.session_state.prev_packets_sel = ()
+if "prev_flows_sel" not in st.session_state:
+    st.session_state.prev_flows_sel = ()
 
 title_col, refresh_col = st.columns([8, 1])
 with title_col:
     st.markdown(get_h2("📦 Traffic Monitor"), unsafe_allow_html=True)
 with refresh_col:
     if st.button("🔄 새로고침", width='stretch'):
-        load_packets.clear()
-        st.session_state.packets_key_ver += 1   # 위젯 key 변경 -> 완전히 새로 마운트 -> 체크 해제
+        st.session_state.packets_key_ver += 1
         st.session_state.flows_key_ver += 1
         st.session_state.prev_packets_sel = ()
         st.session_state.prev_flows_sel = ()
@@ -637,7 +793,7 @@ with left:
         event = st.dataframe(
             display_df,
             width='stretch',
-            height=380,
+            height=340,
             hide_index=True,
             on_select="rerun",
             selection_mode="single-row",
@@ -659,8 +815,8 @@ with left:
 
             flow_event = st.dataframe(
                 flow_view,
-                width="stretch",
-                height=380,
+                use_container_width=True,
+                height=340,
                 hide_index=True,
                 on_select="rerun",
                 selection_mode="single-row",
