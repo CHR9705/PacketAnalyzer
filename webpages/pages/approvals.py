@@ -51,7 +51,7 @@ with left_col:
             col1.write(f"**{u['email']}**")
             col1.caption(f"신청일: {u['created_at']}")
 
-            if col2.button("✅ 승인", key=f"approve_{u['id']}", use_container_width=True):
+            if col2.button("✅ 승인", key=f"approve_{u['id']}", width="stretch"):
                 conn = get_db()
                 conn.execute("UPDATE users SET status = 'approved' WHERE id = ?", (u["id"],))
                 conn.execute(
@@ -70,7 +70,7 @@ with left_col:
                 )
                 st.rerun()
 
-            if col3.button("❌ 거절", key=f"reject_{u['id']}", use_container_width=True):
+            if col3.button("❌ 거절", key=f"reject_{u['id']}", width="stretch"):
                 conn = get_db()
                 conn.execute("UPDATE users SET status = 'rejected' WHERE id = ?", (u["id"],))
                 conn.execute(
@@ -109,13 +109,13 @@ with right_col:
             col1.caption(f"(현재: {r['current_role']}) → `{r['requested_role']}` 권한 요청")
             col1.caption(f"신청일: {r['created_at']}")
 
-            if col2.button("✅ 승인", key=f"approve_role_{r['id']}", use_container_width=True):
+            if col2.button("✅ 승인", key=f"approve_role_{r['id']}", width="stretch"):
                 ok, message = resolve_role_request(r["id"], True, me["id"], me["email"])
                 if not ok:
                     st.error(message)
                 st.rerun()
 
-            if col3.button("❌ 거절", key=f"reject_role_{r['id']}", use_container_width=True):
+            if col3.button("❌ 거절", key=f"reject_role_{r['id']}", width="stretch"):
                 ok, message = resolve_role_request(r["id"], False, me["id"], me["email"])
                 if not ok:
                     st.error(message)
