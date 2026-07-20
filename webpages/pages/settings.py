@@ -236,7 +236,7 @@ with list_col1:
     if bl_ips:
         bl_event = st.dataframe(
             pd.DataFrame({"IP": bl_ips}),
-            use_container_width=True,
+            width='stretch',
             height=280,
             hide_index=True,
             on_select="rerun",
@@ -248,7 +248,7 @@ with list_col1:
  
         if st.button(
             f"차단 해제 ({len(bl_selected_ips)}개)" if bl_selected_ips else "차단 해제",
-            use_container_width=True,
+            width='stretch',
             key="bl_remove_btn",
             disabled=len(bl_selected_ips) == 0,
         ):
@@ -270,7 +270,7 @@ with list_col2:
     if wl_ips:
         wl_event = st.dataframe(
             pd.DataFrame({"IP": wl_ips}),
-            use_container_width=True,
+            width='stretch',
             height=280,
             hide_index=True,
             on_select="rerun",
@@ -282,7 +282,7 @@ with list_col2:
  
         if st.button(
             f"해제 ({len(wl_selected_ips)}개)" if wl_selected_ips else "해제",
-            use_container_width=True,
+            width='stretch',
             key="wl_remove_btn",
             disabled=len(wl_selected_ips) == 0,
         ):
