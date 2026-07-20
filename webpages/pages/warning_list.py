@@ -352,7 +352,7 @@ with col_list:
     st.session_state.display_ids = [row["id"] for row in display_rows]
 
     table_df = pd.DataFrame({
-        "선택": [row["id"] == st.session_state.selected_id for row in display_rows],
+        "선택": pd.Series([row["id"] == st.session_state.selected_id for row in display_rows], dtype=bool),
         "Timestamp": [format_ts(row["last_timestamp"]) for row in display_rows],
         "Attack Type": [row["attack_type"] for row in display_rows],
         "Src IP": [row["src_ip"] for row in display_rows],
