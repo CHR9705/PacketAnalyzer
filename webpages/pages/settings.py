@@ -10,9 +10,9 @@ from contextlib import closing
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 DB_PATH = os.path.normpath(os.path.join(BASE_DIR, "..", "..", "packets.db"))
 
-BLACKLIST_TABLE = "black_list"         
-WHITELIST_TABLE = "white_list"        
-IP_COLUMN = "ip" 
+BLACKLIST_TABLE = "black_list"
+WHITELIST_TABLE = "white_list"
+IP_COLUMN = "ip"
 
 def is_valid_ip(ip: str) -> bool:
     try:
@@ -22,7 +22,6 @@ def is_valid_ip(ip: str) -> bool:
         return False
 
 
-
 def get_connection():
     conn = sqlite3.connect(DB_PATH, check_same_thread=False)
     conn.execute("PRAGMA busy_timeout = 5000")
@@ -30,8 +29,6 @@ def get_connection():
 
 @st.cache_resource
 def get_shared_connection():
-    # cache_resource ensures this only runs once per session instead of
-    # opening a new leaked connection on every Streamlit rerun
     conn = sqlite3.connect(DB_PATH, check_same_thread=False, isolation_level=None)
     conn.execute("PRAGMA busy_timeout = 5000")
     return conn
@@ -48,7 +45,7 @@ def search_ip(ip: str):
         df_bl = pd.read_sql_query(bl_query, conn, params=(ip,))
         df_wl = pd.read_sql_query(wl_query, conn, params=(ip,))
     return df_bl, df_wl
- 
+
 
 def add_to_blacklist(ip: str, accepted: bool = False):
     try:
@@ -81,32 +78,33 @@ def add_to_whitelist(ip: str, accepted: bool = False):
         return True, None
     except Exception as e:
         return False, str(e)
- 
- 
+
+
 def remove_from_blacklist(ip: str):
+    """차단 해제: black_list와 blocked_packets 테이블에서
+    해당 IP 기록을 실제로 삭제한다. (iptables는 아직 미구현이라 DB만 처리)"""
     try:
         conn = get_shared_connection()
-        conn.execute("UPDATE black_list SET accepted = 2 WHERE ip = ?", (ip,))
+        conn.execute("DELETE FROM black_list WHERE ip = ?", (ip,))
+        conn.execute("DELETE FROM blocked_packets WHERE src_ip = ?", (ip,))
         return True, None
     except Exception as e:
         return False, str(e)
- 
- 
+
+
 def remove_from_whitelist(ip: str):
     try:
         conn = get_shared_connection()
-        conn.execute("UPDATE white_list SET accepted = 2 WHERE ip = ?", (ip,))
+        conn.execute("DELETE FROM white_list WHERE ip = ?", (ip,))
         return True, None
     except Exception as e:
         return False, str(e)
- 
- 
-def fetch_all_ips(table: str, ip_column: str = "ip", exclude_accepted_2: bool = False) -> list:
+
+
+def fetch_all_ips(table: str, ip_column: str = "ip") -> list:
     with closing(get_connection()) as conn:
         try:
             query = f"SELECT {ip_column} FROM {table}"
-            if exclude_accepted_2:
-                query += " WHERE accepted != 2"
             df = pd.read_sql_query(query, conn)
             return df[ip_column].tolist()
         except Exception:
@@ -145,9 +143,9 @@ st.markdown(
     """,
     unsafe_allow_html=True,
 )
- 
+
 if "search_status" not in st.session_state:
-    st.session_state["search_status"] = None  # None | "black" | "white" | "both" | "not_found" | "empty"
+    st.session_state["search_status"] = None
 
 def do_search(ip_value: str):
     if not ip_value.strip():
@@ -165,26 +163,25 @@ def do_search(ip_value: str):
     else:
         st.session_state["search_status"] = "not_found"
 
-# ---- Top row: search icon | IP input | block button | whitelist button ----
 outer_search_col, outer_action_col = st.columns([4, 2.7])
- 
+
 with st.form(key="search_form", clear_on_submit=False, border=False):
     col_input, col_search, col_block, col_white = st.columns([3, 0.7, 1.1, 1.6])
-    
+
     with col_search:
         search_clicked = st.form_submit_button("🔍", width=300)
- 
+
     with col_input:
         ip_input = st.text_input(
             "IP", key="ip_value", label_visibility="collapsed", placeholder="IP"
         )
- 
+
     with col_block:
         block_clicked = st.form_submit_button("차단", width=100)
- 
+
     with col_white:
         whitelist_clicked = st.form_submit_button("화이트리스트로 추가", width=200)
-# ---- Handle search ----
+
 if search_clicked:
     do_search(ip_input)
 
@@ -199,8 +196,7 @@ elif status == "white":
     st.markdown('<div class="success-text">화이트리스트에 등록된 IP입니다.</div>', unsafe_allow_html=True)
 elif status == "both":
     st.markdown('<div class="error-text">블랙리스트와 화이트리스트에 모두 등록되어 있습니다.</div>', unsafe_allow_html=True)
- 
-# ---- Handle block / whitelist (work even without searching first) ----
+
 if block_clicked:
     if not ip_input.strip():
         st.markdown('<div class="error-text">차단할 IP를 입력해주세요.</div>', unsafe_allow_html=True)
@@ -212,7 +208,7 @@ if block_clicked:
             st.rerun()
         else:
             st.markdown(f'<div class="error-text">차단 실패: {err}</div>', unsafe_allow_html=True)
- 
+
 if whitelist_clicked:
     if not ip_input.strip():
         st.markdown('<div class="error-text">추가할 IP를 입력해주세요.</div>', unsafe_allow_html=True)
@@ -224,15 +220,14 @@ if whitelist_clicked:
             st.rerun()
         else:
             st.markdown(f'<div class="error-text">추가 실패: {err}</div>', unsafe_allow_html=True)
- 
+
 st.divider()
- 
-# ---- Bottom: blacklist / whitelist columns ----
+
 list_col1, list_col2 = st.columns(2)
- 
+
 with list_col1:
     st.markdown("### 블랙리스트")
-    bl_ips = fetch_all_ips(BLACKLIST_TABLE, exclude_accepted_2=True)
+    bl_ips = fetch_all_ips(BLACKLIST_TABLE)
     if bl_ips:
         bl_event = st.dataframe(
             pd.DataFrame({"IP": bl_ips}),
@@ -245,7 +240,7 @@ with list_col1:
         )
         bl_selected_rows = bl_event.selection.rows if bl_event and bl_event.selection else []
         bl_selected_ips = [bl_ips[i] for i in bl_selected_rows]
- 
+
         if st.button(
             f"차단 해제 ({len(bl_selected_ips)}개)" if bl_selected_ips else "차단 해제",
             width='stretch',
@@ -263,10 +258,10 @@ with list_col1:
                 st.rerun()
     else:
         st.caption("등록된 항목이 없습니다.")
- 
+
 with list_col2:
     st.markdown("### 화이트리스트")
-    wl_ips = fetch_all_ips(WHITELIST_TABLE, exclude_accepted_2=True)
+    wl_ips = fetch_all_ips(WHITELIST_TABLE)
     if wl_ips:
         wl_event = st.dataframe(
             pd.DataFrame({"IP": wl_ips}),
@@ -279,7 +274,7 @@ with list_col2:
         )
         wl_selected_rows = wl_event.selection.rows if wl_event and wl_event.selection else []
         wl_selected_ips = [wl_ips[i] for i in wl_selected_rows]
- 
+
         if st.button(
             f"해제 ({len(wl_selected_ips)}개)" if wl_selected_ips else "해제",
             width='stretch',

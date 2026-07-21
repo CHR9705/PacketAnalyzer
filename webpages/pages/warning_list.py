@@ -30,7 +30,6 @@ GRADE_EMOJI = {
     "None": "🔵",
 }
 
-# 등급별 진한 색(차트, 뱃지 텍스트/테두리용)
 GRADE_COLORS = {
     "Critical": "#d32f2f",
     "High": "#f57c00",
@@ -39,7 +38,6 @@ GRADE_COLORS = {
     "None": "#1976d2",
 }
 
-# 등급별 연한 배경색(뱃지 배경용) - 다크 카드 위에서 잘 보이도록 반투명 처리
 GRADE_BG = {
     "Critical": "rgba(211, 47, 47, 0.18)",
     "High": "rgba(245, 124, 0, 0.18)",
@@ -48,8 +46,6 @@ GRADE_BG = {
     "None": "rgba(25, 118, 210, 0.18)",
 }
 
-# --- 디자인 토큰 + 전역 스타일 ---
-# 배경/카드/여백/폰트 위계를 하나의 스타일 시트로 통일해서 관리한다.
 st.markdown(
     """
     <style>
@@ -78,7 +74,6 @@ st.markdown(
         color: #b5bac1 !important;
         font-size: 1.15rem !important;
     }
-    /* 차단 버튼을 눈에 띄는 빨간색으로 강조 */
     button[kind="primary"] {
         background-color: #d32f2f !important;
         border-color: #d32f2f !important;
@@ -193,7 +188,6 @@ def add_to_blacklist(ip: str, accepted: bool = False):
         return False, str(e)
 
 
-# 취소가 아닌 x 시 재팝업 방지 파라미터 적용
 def reset_confirm_dialog():
     st.session_state.confirm_dialog_id = None
     st.session_state.block_error = None
@@ -226,7 +220,6 @@ def confirm_block_dialog(row):
 
 st.title("경고 목록")
 
-# --- 자동 새로고침 설정 ---
 refresh_count = None
 try:
     from streamlit_autorefresh import st_autorefresh
@@ -238,12 +231,6 @@ except ImportError:
         "(설치 전에는 페이지를 수동으로 새로고침해야 합니다.)"
     )
 
-# --- 핵심 수정 포인트 ---
-# 체크박스를 클릭하면 스크립트가 재실행되는데, 예전 코드는 재실행될 때마다
-# 무조건 새 데이터를 추가해서 목록이 흔들리고 세부정보가 사라지는 문제가 있었다.
-# st_autorefresh가 돌려주는 refresh_count가 "실제로 타이머가 울려서 재실행된 경우"에만
-# 바뀌므로, 그때만 DB를 다시 읽어오고 체크박스 클릭으로 인한 재실행에서는
-# 기존 데이터를 그대로 사용한다.
 if "warnings_df" not in st.session_state:
     st.session_state.warnings_df = load_warnings()
     st.session_state.last_refresh_count = refresh_count
@@ -280,10 +267,6 @@ st.markdown(
     unsafe_allow_html=True,
 )
 
-# --- 공격 유형별 카운트 차트 ---
-# 고정된 목록이 아니라, 현재 warnings 테이블(Attack Packet List)에 실제로 존재하는
-# attack_type만 뽑아서 그래프를 그린다. 새로운 유형이 들어오면 막대가 새로 생기고,
-# 더 이상 들어오지 않는 유형은 자연스럽게 그래프에서 빠진다.
 present_types = sorted(df["attack_type"].dropna().unique().tolist()) if not df.empty else []
 
 counts = df["attack_type"].value_counts()
@@ -308,7 +291,7 @@ base = alt.Chart(chart_df).encode(
 )
 
 bars = base.mark_bar(
-    size=26, cornerRadiusTopLeft=4, cornerRadiusTopRight=4 ,
+    size=26, cornerRadiusTopLeft=4, cornerRadiusTopRight=4,
 ).encode(
     color=alt.Color(
         "Grade",
@@ -404,7 +387,6 @@ with col_detail:
 
         st.markdown("<div style='height:16px;'></div>", unsafe_allow_html=True)
 
-        # 차단은 되돌릴 수 없는 액션이므로, 버튼을 누르면 팝업으로 한 번 더 확인받는다.
         if st.button("차단하기", key="block_button", type="primary"):
             st.session_state.confirm_dialog_id = selected_row["id"]
 
