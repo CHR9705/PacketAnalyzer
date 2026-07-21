@@ -33,15 +33,8 @@ DEFAULT_COLOR = {"bg": "#f3f4f6", "fg": "#6b7280", "accent": "#9ca3af"}
 
 # Detail 헤더 배경색: Packet/Flow 종류 기준
 KIND_ACCENT = {
-    "packet": "#3b82f6",  # 파랑
-    "flow": "#8b5cf6",    # 보라
-}
-DEFAULT_COLOR = {"bg": "#f3f4f6", "fg": "#6b7280", "accent": "#9ca3af"}
-
-# Detail 헤더 배경색: Packet/Flow 종류 기준
-KIND_ACCENT = {
-    "packet": "#3b82f6",  # 파랑
-    "flow": "#8b5cf6",    # 보라
+    "packet": "#31a758ff",
+    "flow": "#70e0db",  
 }
 
 from  webpages.css.st_metric import metric_cards, detail_card_styles
@@ -265,20 +258,22 @@ def render_detail(row: pd.Series, kind: str = "packet") -> str:
             return '<span class="badge badge-flag-empty">-</span>'
         return f'<span class="badge" style="background:{bg};color:{fg};">{value}</span>'
 
-    def add_row(rows_list, label, value_html):
-        rows_list.append(
-            f'<div class="detail-row"><span class="detail-key">{label}</span>'
-            f'<span class="detail-val">{value_html}</span></div>'
+    def field_grid_html(pairs) -> str:
+        """warning_list.py의 field_grid_html과 동일한 방식: 라벨은 위, 값은 아래, 2열 그리드."""
+        cells = "".join(
+            "<div>"
+            f"<div style='color:#94a3b8; font-size:0.82em; margin-bottom:2px;'>{label}</div>"
+            f"<div style='font-size:1.02em; font-weight:600; color:#f1f5f9;'>{value}</div>"
+            "</div>"
+            for label, value in pairs
         )
+        return f"<div style='display:grid; grid-template-columns:1fr 1fr; gap:16px 24px;'>{cells}</div>"
 
     proto = d.get("protocol", "-")
-    colors = _protocol_color(proto)          # 프로토콜 뱃지 색상용 (그대로 유지)
-    colors = _protocol_color(proto)          # 프로토콜 뱃지 색상용 (그대로 유지)
+    colors = _protocol_color(proto)
     proto_badge = badge(proto, colors["bg"], colors["fg"])
-    kind_accent = KIND_ACCENT.get(kind, DEFAULT_COLOR["accent"])   # 헤더 배경용 (새로 추가)
     flag_badge = badge(d.get("tcp_flags", ""), "#eef2ff", "#4f46e5")
-    kind_accent = KIND_ACCENT.get(kind, DEFAULT_COLOR["accent"])   # 헤더 배경용 (새로 추가)
-    flag_badge = badge(d.get("tcp_flags", ""), "#eef2ff", "#4f46e5")
+    kind_accent = KIND_ACCENT.get(kind, DEFAULT_COLOR["accent"])
 
     ts_display = _format_ts(d.get("timestamp")) if kind == "packet" else _format_ts(d.get("first_seen"))
     src_ip = d.get("src_ip", "-")
@@ -289,62 +284,70 @@ def render_detail(row: pd.Series, kind: str = "packet") -> str:
     dst_label = f"{dst_ip}   :   {dst_port}" if dst_port not in (None, "", "nan") else f"{dst_ip}"
 
     header = f"""
-    <div class="detail-header" style="--accent-a:{kind_accent}; --accent-b:{kind_accent}cc;">
-    <div class="detail-header" style="--accent-a:{kind_accent}; --accent-b:{kind_accent}cc;">
-        <div class="detail-id-row">
-            <span class="detail-id">#{d.get('id', '-')}</span>
+    <div style="background:linear-gradient(135deg, {kind_accent}26, {kind_accent}14);
+         border:1px solid {kind_accent}55;
+         border-radius:14px; padding:16px 20px; margin-bottom:16px;
+         backdrop-filter:blur(12px); -webkit-backdrop-filter:blur(12px);">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
+            <span style="color:#e2e8f0; opacity:0.85; font-size:0.85em;">#{d.get('id', '-')}</span>
             {kind_badge}
         </div>
-        <div class="detail-flow-line">
+        <div style="color:#f1f5f9; font-weight:700; font-size:1.05em; display:flex; align-items:center; gap:8px;">
             <span>{src_label}</span>
-            <span class="detail-flow-arrow">→</span>
+            <span style="opacity:0.7;">→</span>
             <span>{dst_label}</span>
         </div>
     </div>
     """
 
-    body_rows = []
+    pairs = []
     if kind == "packet":
-        add_row(body_rows, "들어온 시간", ts_display)
-        add_row(body_rows, "타입", proto_badge)
-        add_row(body_rows, "출발지 IP", src_ip)
-        add_row(body_rows, "목적지 IP", dst_ip)
-        add_row(body_rows, "출발지 포트", src_port if src_port not in (None, "", "nan") else "-")
-        add_row(body_rows, "목적지 포트", dst_port if dst_port not in (None, "", "nan") else "-")
-        add_row(body_rows, "Packet 크기", f"{d.get('packet_size', 0):,} B")
-        add_row(body_rows, "Payload 크기", f"{d.get('payload_size', 0):,} B")
-        add_row(body_rows, "TCP Flags", flag_badge)
+        pairs = [
+            ("들어온 시간", ts_display),
+            ("타입", proto_badge),
+            ("출발지 IP", src_ip),
+            ("목적지 IP", dst_ip),
+            ("출발지 포트", src_port if src_port not in (None, "", "nan") else "-"),
+            ("목적지 포트", dst_port if dst_port not in (None, "", "nan") else "-"),
+            ("Packet 크기", f"{d.get('packet_size', 0):,} B"),
+            ("Payload 크기", f"{d.get('payload_size', 0):,} B"),
+            ("TCP Flags", flag_badge),
+        ]
     else:
-        add_row(body_rows, "타입", proto_badge)
-        add_row(body_rows, "출발지 IP", src_ip)
-        add_row(body_rows, "목적지 IP", dst_ip)
-        add_row(body_rows, "출발지 Port", src_port if src_port not in (None, "", "nan") else "-")
-        add_row(body_rows, "목적지 Port", dst_port if dst_port not in (None, "", "nan") else "-")
+        pairs = [
+            ("타입", proto_badge),
+            ("출발지 IP", src_ip),
+            ("목적지 IP", dst_ip),
+            ("출발지 Port", src_port if src_port not in (None, "", "nan") else "-"),
+            ("목적지 Port", dst_port if dst_port not in (None, "", "nan") else "-"),
+        ]
         if "packet_count" in d:
-            add_row(body_rows, "Packet 수", f'{d["packet_count"]:,}')
+            pairs.append(("Packet 수", f'{d["packet_count"]:,}'))
         if "total_bytes" in d:
-            add_row(body_rows, "Total Bytes", f'{d["total_bytes"]:,} B')
+            pairs.append(("Total Bytes", f'{d["total_bytes"]:,} B'))
         if "first_seen" in d:
-            add_row(body_rows, "First Seen", _format_ts(d.get("first_seen")))
+            pairs.append(("First Seen", _format_ts(d.get("first_seen"))))
         if "last_seen" in d:
-            add_row(body_rows, "Last Seen", _format_ts(d.get("last_seen")))
+            pairs.append(("Last Seen", _format_ts(d.get("last_seen"))))
 
-    body_html = f'<div class="detail-group">{"".join(body_rows)}</div>'
+    body_html = field_grid_html(pairs)
 
     raw_html = ""
     if kind == "packet" and d.get("raw_packet") not in (None, "", "nan"):
         raw_html = f"""
-        <div class="detail-group-title">🧬 Raw Packet</div>
-        <div class="detail-raw">{d['raw_packet']}</div>
+        <div style="margin-top:16px; color:#94a3b8; font-size:0.82em; margin-bottom:6px;">🧬 Raw Packet</div>
+        <div style="font-family:monospace; font-size:0.82em; color:#cbd5e1; word-break:break-all;
+             background:rgba(0,0,0,0.25); border-radius:8px; padding:10px 12px;">{d['raw_packet']}</div>
         """
 
     html = f"""
-    <div class="detail-card">
+    <div style="border:1px solid rgba(255,255,255,0.14); border-left:4px solid {kind_accent};
+         border-radius:20px; padding:20px 24px; background-color:rgba(255,255,255,0.06);
+         box-shadow:0 8px 32px rgba(0,0,0,0.35), inset 0 1px 0 rgba(255,255,255,0.18);
+         backdrop-filter:blur(24px) saturate(160%); -webkit-backdrop-filter:blur(24px) saturate(160%);">
         {header}
-        <div class="detail-body">
-            {body_html}
-            {raw_html}
-        </div>
+        {body_html}
+        {raw_html}
     </div>
     """
     return _flatten_html(html)
