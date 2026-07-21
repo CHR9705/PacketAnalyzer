@@ -202,8 +202,19 @@ def confirm_block_dialog(row):
         if st.button("차단", key="confirm_block", type="primary", width="stretch"):
             success, err = add_to_blacklist(ip, accepted=True)
             if success:
+                # 차단이 완료되었으니 warnings 테이블에서도 해당 기록을 삭제한다
+                try:
+                    conn = sqlite3.connect(DB_PATH, check_same_thread=False, isolation_level=None)
+                    conn.execute("DELETE FROM warnings WHERE id = ?", (row["id"],))
+                    conn.close()
+                except Exception as e:
+                    st.session_state.block_error = f"차단은 되었으나 warnings 기록 삭제 실패: {e}"
+                    st.rerun()
+
                 st.session_state.confirm_dialog_id = None
                 st.session_state.block_error = None
+                st.session_state.selected_id = None
+                st.session_state.warnings_df = load_warnings()  # 목록 즉시 갱신
                 st.rerun()
             else:
                 st.session_state.block_error = err
