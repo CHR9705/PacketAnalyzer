@@ -6,6 +6,7 @@ import pandas as pd
 import plotly.graph_objects as go
 import pycountry
 import streamlit as st
+from babel import Locale
 from zoneinfo import ZoneInfo
 from webpages.functions.titles  import get_h2
 from webpages.css.st_header import _setting
@@ -103,6 +104,7 @@ st.markdown(
         border-left: 1px solid rgba(148,163,184,0.12);
         padding-left: 20px !important;
     }
+
 
     /* Packets / Flows 탭 스타일 */
     button[data-baseweb="tab"] {
@@ -492,7 +494,6 @@ def _safe_iso3(iso2):
         return None
 
 
-# 국가 코드(ISO alpha-2) -> 한글 국가명 (babel 미설치 환경을 위한 폴백 테이블)
 _KO_COUNTRY_FALLBACK = {
     "US": "미국", "KR": "대한민국", "CN": "중국", "JP": "일본", "RU": "러시아",
     "DE": "독일", "FR": "프랑스", "GB": "영국", "NL": "네덜란드", "SG": "싱가포르",
@@ -686,11 +687,6 @@ st.markdown(
     unsafe_allow_html=True,
 )
 
-# ----------------------------------------------------------------------
-# 전체 트래픽 / Blocked 전환 버튼
-# 큰 틀(레이아웃)은 그대로 두고, 아래에서 로드하는 데이터 소스와
-# KPI 카드 내용만 모드에 따라 전환된다.
-# ----------------------------------------------------------------------
 if "view_mode" not in st.session_state:
     st.session_state.view_mode = "all"  # "all" | "blocked"
 
@@ -840,13 +836,14 @@ else:
 
         col_map, col_pie = st.columns([3, 1], gap="small")
         with col_map:
-            st.markdown('<div class="geo-map-anchor"></div>', unsafe_allow_html=True)
+
             st.plotly_chart(fig_geo, width="stretch", config={"displayModeBar": False})
         with col_pie:
             st.plotly_chart(fig_pie, width="stretch", config={"displayModeBar": False})
 
     st.markdown(
         f'<div class="geo-note-pills">'
+        f'<span class="geo-pill geo-pill-info">🌎 공인 IP {TOTAL_PACKETS-len(private_df)+len(anomalous_df):,}건</span>'
         f'<span class="geo-pill geo-pill-info">🏠 사설 IP {len(private_df):,}건</span>'
         f'<span class="geo-pill geo-pill-warn">⚠️ 비정상 출발지(멀티캐스트/예약대역) {len(anomalous_df):,}건</span>'
         f'</div>',
