@@ -12,3 +12,4 @@ pycountry
 Werkzeug>=3.0
 babel
 edge_tts
+captcha
