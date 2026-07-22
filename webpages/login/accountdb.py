@@ -8,8 +8,17 @@ BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 DB_PATH = os.path.normpath(os.path.join(BASE_DIR, "..","..", "account.db"))
 
 SESSION_TTL_DAYS = 7        # 세션 토큰 유효 기간
-MAX_FAILED_ATTEMPTS = 7     # 로그인 실패 허용 횟수
-LOCKOUT_MINUTES = 5         # 잠금 지속 시간
+MAX_FAILED_ATTEMPTS = 5     # 이메일 기준 로그인 실패 허용 횟수
+LOCKOUT_MINUTES = 5         # 이메일 기준 잠금 지속 시간
+
+MAX_FAILED_ATTEMPTS_IP = 20   # IP 기준 로그인 실패 허용 횟수 (여러 계정 순회 공격 방지용, 공용 IP 고려해 더 느슨하게)
+LOCKOUT_MINUTES_IP = 15       # IP 기준 잠금 지속 시간
+
+MAX_SIGNUP_ATTEMPTS_IP = 5    # IP 기준 회원가입 시도 허용 횟수 (짧은 시간 내 계정 대량 생성/스팸 방지)
+SIGNUP_LOCKOUT_MINUTES_IP = 30  # IP 기준 회원가입 잠금 지속 시간
+
+MAX_CAPTCHA_FAILS_IP = 5    # IP 기준 캡차 실패 허용 횟수 (캡차 자체를 반복 시도하는 것 방지)
+CAPTCHA_LOCKOUT_MINUTES_IP = 10  # IP 기준 캡차 잠금 지속 시간
 
 
 def _hash_token(raw_token: str) -> str:
@@ -72,13 +81,54 @@ def init_db():
     )
 
     # -------------------------------------------------
-    # login_attempts: brute-force 방지
+    # login_attempts: 이메일 기준 brute-force 방지
     # -------------------------------------------------
     conn.execute(
         """
         CREATE TABLE IF NOT EXISTS login_attempts (
             email TEXT PRIMARY KEY,
             failed_count INTEGER NOT NULL DEFAULT 0,
+            locked_until TIMESTAMP
+        )
+        """
+    )
+
+    # -------------------------------------------------
+    # ip_login_attempts: IP 기준 brute-force 방지
+    # (같은 이메일로는 5회 미만씩만 시도하며 여러 계정을 순회하는 공격 방지용)
+    # -------------------------------------------------
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS ip_login_attempts (
+            ip TEXT PRIMARY KEY,
+            failed_count INTEGER NOT NULL DEFAULT 0,
+            locked_until TIMESTAMP
+        )
+        """
+    )
+
+    # -------------------------------------------------
+    # signup_attempts: IP 기준 회원가입 스팸/대량 생성 방지
+    # -------------------------------------------------
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS signup_attempts (
+            ip TEXT PRIMARY KEY,
+            attempt_count INTEGER NOT NULL DEFAULT 0,
+            locked_until TIMESTAMP
+        )
+        """
+    )
+
+    # -------------------------------------------------
+    # captcha_attempts: IP 기준 캡차 반복 실패 방지
+    # (로그인/비밀번호와 무관하게 캡차 자체를 스크립트로 반복 시도하는 것 차단)
+    # -------------------------------------------------
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS captcha_attempts (
+            ip TEXT PRIMARY KEY,
+            fail_count INTEGER NOT NULL DEFAULT 0,
             locked_until TIMESTAMP
         )
         """
@@ -165,8 +215,9 @@ def _ensure_default_admin():
     승인해줄 admin 계정이 최소 1명은 있어야 합니다.
     admin 계정이 하나도 없으면 기본 계정을 하나 만들어둡니다.
 
-    !! 중요 !!: admin@local / admin123! 은 임시 비밀번호입니다.
-    실사용 전에는 create_admin.py로 별도 admin 계정을 만들고 이 계정은 지우세요.
+    !! 중요 !!: admin / admin 은 테스트 전용 계정입니다. 이메일 형식/비밀번호 정책 검증을
+    거치지 않고 DB에 직접 심어둔 것이므로, 실사용 전에는 create_admin.py로 별도 admin
+    계정을 만들고 이 계정은 지우세요.
     """
     from werkzeug.security import generate_password_hash
 
@@ -189,7 +240,7 @@ def _ensure_default_admin():
 # ---------------------------------------------------------
 def create_session(user_id: int) -> str:
     raw_token = secrets.token_urlsafe(32)
-    expires_at = datetime.utcnow() + timedelta(days=SESSION_TTL_DAYS)
+    expires_at = datetime.now().astimezone() + timedelta(days=SESSION_TTL_DAYS)
 
     conn = get_db()
     conn.execute(
@@ -221,7 +272,7 @@ def get_user_by_session(raw_token: str):
         conn.close()
         return None
 
-    if datetime.fromisoformat(row["expires_at"]) < datetime.utcnow():
+    if datetime.fromisoformat(row["expires_at"]) < datetime.now().astimezone():
         conn.execute("DELETE FROM sessions WHERE token_hash = ?", (_hash_token(raw_token),))
         conn.commit()
         conn.close()
@@ -251,7 +302,7 @@ def delete_session(raw_token: str):
 def cleanup_expired_sessions():
     """만료된 세션들을 DB에서 정리합니다. init_db()에서 자동 호출됩니다."""
     conn = get_db()
-    conn.execute("DELETE FROM sessions WHERE expires_at < ?", (datetime.utcnow(),))
+    conn.execute("DELETE FROM sessions WHERE expires_at < ?", (datetime.now().astimezone(),))
     conn.commit()
     conn.close()
 
@@ -271,7 +322,7 @@ def is_locked_out(email: str):
         return False, 0
 
     locked_until = datetime.fromisoformat(row["locked_until"])
-    remaining = (locked_until - datetime.utcnow()).total_seconds()
+    remaining = (locked_until - datetime.now().astimezone()).total_seconds()
     if remaining <= 0:
         return False, 0
     return True, int(remaining)
@@ -283,6 +334,7 @@ def record_failed_login(email: str):
         "SELECT failed_count FROM login_attempts WHERE email = ?", (email,)
     ).fetchone()
 
+    just_locked = False
     if row is None:
         conn.execute(
             "INSERT INTO login_attempts (email, failed_count) VALUES (?, 1)", (email,)
@@ -290,11 +342,12 @@ def record_failed_login(email: str):
     else:
         new_count = row["failed_count"] + 1
         if new_count >= MAX_FAILED_ATTEMPTS:
-            locked_until = datetime.utcnow() + timedelta(minutes=LOCKOUT_MINUTES)
+            locked_until = datetime.now().astimezone() + timedelta(minutes=LOCKOUT_MINUTES)
             conn.execute(
                 "UPDATE login_attempts SET failed_count = ?, locked_until = ? WHERE email = ?",
                 (new_count, locked_until, email),
             )
+            just_locked = True
         else:
             conn.execute(
                 "UPDATE login_attempts SET failed_count = ? WHERE email = ?",
@@ -303,12 +356,230 @@ def record_failed_login(email: str):
     conn.commit()
     conn.close()
 
+    if just_locked:
+        add_notification(
+            "security_alert",
+            f"'{email}' 계정이 로그인 {MAX_FAILED_ATTEMPTS}회 연속 실패로 {LOCKOUT_MINUTES}분간 잠겼습니다.",
+        )
+        log_action("account_locked", actor_email=email, detail=f"failed_attempts={MAX_FAILED_ATTEMPTS}")
+
 
 def record_successful_login(email: str):
     conn = get_db()
     conn.execute(
         "UPDATE login_attempts SET failed_count = 0, locked_until = NULL WHERE email = ?",
         (email,),
+    )
+    conn.commit()
+    conn.close()
+
+
+# ---------------------------------------------------------
+# 로그인 시도 제한 (IP 기준)
+# 같은 이메일로는 5회 미만씩만 시도하면서 여러 계정을 순회하는 공격을 막기 위한 보조 수단.
+# 주의: st.context.ip는 프록시 뒤에서 조작될 수 있어 완벽한 신뢰는 불가. 보조 방어선으로만 사용.
+# ---------------------------------------------------------
+def is_ip_locked_out(ip: str):
+    if not ip:
+        return False, 0
+    conn = get_db()
+    row = conn.execute(
+        "SELECT locked_until FROM ip_login_attempts WHERE ip = ?", (ip,)
+    ).fetchone()
+    conn.close()
+
+    if row is None or row["locked_until"] is None:
+        return False, 0
+
+    locked_until = datetime.fromisoformat(row["locked_until"])
+    remaining = (locked_until - datetime.now().astimezone()).total_seconds()
+    if remaining <= 0:
+        return False, 0
+    return True, int(remaining)
+
+
+def record_failed_login_ip(ip: str):
+    if not ip:
+        return
+    conn = get_db()
+    row = conn.execute(
+        "SELECT failed_count FROM ip_login_attempts WHERE ip = ?", (ip,)
+    ).fetchone()
+
+    just_locked = False
+    if row is None:
+        conn.execute(
+            "INSERT INTO ip_login_attempts (ip, failed_count) VALUES (?, 1)", (ip,)
+        )
+    else:
+        new_count = row["failed_count"] + 1
+        if new_count >= MAX_FAILED_ATTEMPTS_IP:
+            locked_until = datetime.now().astimezone() + timedelta(minutes=LOCKOUT_MINUTES_IP)
+            conn.execute(
+                "UPDATE ip_login_attempts SET failed_count = ?, locked_until = ? WHERE ip = ?",
+                (new_count, locked_until, ip),
+            )
+            just_locked = True
+        else:
+            conn.execute(
+                "UPDATE ip_login_attempts SET failed_count = ? WHERE ip = ?",
+                (new_count, ip),
+            )
+    conn.commit()
+    conn.close()
+
+    if just_locked:
+        add_notification(
+            "security_alert",
+            f"IP '{ip}'에서 로그인 {MAX_FAILED_ATTEMPTS_IP}회 연속 실패로 {LOCKOUT_MINUTES_IP}분간 차단되었습니다. "
+            f"여러 계정을 순회하는 공격일 수 있습니다.",
+        )
+        log_action("ip_locked", detail=f"ip={ip}, failed_attempts={MAX_FAILED_ATTEMPTS_IP}")
+
+
+def record_successful_login_ip(ip: str):
+    if not ip:
+        return
+    conn = get_db()
+    conn.execute(
+        "UPDATE ip_login_attempts SET failed_count = 0, locked_until = NULL WHERE ip = ?",
+        (ip,),
+    )
+    conn.commit()
+    conn.close()
+
+
+# ---------------------------------------------------------
+# 회원가입 스팸/대량 생성 방지 (IP 기준)
+# ---------------------------------------------------------
+def is_signup_locked_out(ip: str):
+    if not ip:
+        return False, 0
+    conn = get_db()
+    row = conn.execute(
+        "SELECT locked_until FROM signup_attempts WHERE ip = ?", (ip,)
+    ).fetchone()
+    conn.close()
+
+    if row is None or row["locked_until"] is None:
+        return False, 0
+
+    locked_until = datetime.fromisoformat(row["locked_until"])
+    remaining = (locked_until - datetime.now().astimezone()).total_seconds()
+    if remaining <= 0:
+        return False, 0
+    return True, int(remaining)
+
+
+def record_signup_attempt(ip: str):
+    """회원가입 시도(성공/실패 무관)가 있을 때마다 호출. 임계치 넘으면 해당 IP를 잠급니다."""
+    if not ip:
+        return
+    conn = get_db()
+    row = conn.execute(
+        "SELECT attempt_count FROM signup_attempts WHERE ip = ?", (ip,)
+    ).fetchone()
+
+    just_locked = False
+    if row is None:
+        conn.execute(
+            "INSERT INTO signup_attempts (ip, attempt_count) VALUES (?, 1)", (ip,)
+        )
+    else:
+        new_count = row["attempt_count"] + 1
+        if new_count >= MAX_SIGNUP_ATTEMPTS_IP:
+            locked_until = datetime.now().astimezone() + timedelta(minutes=SIGNUP_LOCKOUT_MINUTES_IP)
+            conn.execute(
+                "UPDATE signup_attempts SET attempt_count = ?, locked_until = ? WHERE ip = ?",
+                (new_count, locked_until, ip),
+            )
+            just_locked = True
+        else:
+            conn.execute(
+                "UPDATE signup_attempts SET attempt_count = ? WHERE ip = ?",
+                (new_count, ip),
+            )
+    conn.commit()
+    conn.close()
+
+    if just_locked:
+        add_notification(
+            "security_alert",
+            f"IP '{ip}'에서 {MAX_SIGNUP_ATTEMPTS_IP}회 연속 회원가입 시도가 감지되어 "
+            f"{SIGNUP_LOCKOUT_MINUTES_IP}분간 차단되었습니다. 대량 계정 생성 공격일 수 있습니다.",
+        )
+        log_action("signup_spam_blocked", detail=f"ip={ip}, attempts={MAX_SIGNUP_ATTEMPTS_IP}")
+
+
+# ---------------------------------------------------------
+# captcha_attempts: IP 기준 캡차 반복 실패 방지
+# 로그인/회원가입 전 단계에서 캡차 자체를 스크립트로 반복 시도하는 것을 막습니다.
+# ---------------------------------------------------------
+def is_captcha_locked_out(ip: str):
+    if not ip:
+        return False, 0
+    conn = get_db()
+    row = conn.execute(
+        "SELECT locked_until FROM captcha_attempts WHERE ip = ?", (ip,)
+    ).fetchone()
+    conn.close()
+
+    if row is None or row["locked_until"] is None:
+        return False, 0
+
+    locked_until = datetime.fromisoformat(row["locked_until"])
+    remaining = (locked_until - datetime.now().astimezone()).total_seconds()
+    if remaining <= 0:
+        return False, 0
+    return True, int(remaining)
+
+
+def record_captcha_failure(ip: str):
+    if not ip:
+        return
+    conn = get_db()
+    row = conn.execute(
+        "SELECT fail_count FROM captcha_attempts WHERE ip = ?", (ip,)
+    ).fetchone()
+
+    just_locked = False
+    if row is None:
+        conn.execute(
+            "INSERT INTO captcha_attempts (ip, fail_count) VALUES (?, 1)", (ip,)
+        )
+    else:
+        new_count = row["fail_count"] + 1
+        if new_count >= MAX_CAPTCHA_FAILS_IP:
+            locked_until = datetime.now().astimezone() + timedelta(minutes=CAPTCHA_LOCKOUT_MINUTES_IP)
+            conn.execute(
+                "UPDATE captcha_attempts SET fail_count = ?, locked_until = ? WHERE ip = ?",
+                (new_count, locked_until, ip),
+            )
+            just_locked = True
+        else:
+            conn.execute(
+                "UPDATE captcha_attempts SET fail_count = ? WHERE ip = ?",
+                (new_count, ip),
+            )
+    conn.commit()
+    conn.close()
+
+    if just_locked:
+        add_notification(
+            "security_alert",
+            f"IP '{ip}'에서 보안 확인(캡차)을 {MAX_CAPTCHA_FAILS_IP}회 연속 실패하여 "
+            f"{CAPTCHA_LOCKOUT_MINUTES_IP}분간 차단되었습니다. 자동화 스크립트일 수 있습니다.",
+        )
+        log_action("captcha_spam_blocked", detail=f"ip={ip}, fails={MAX_CAPTCHA_FAILS_IP}")
+
+
+def record_captcha_success(ip: str):
+    if not ip:
+        return
+    conn = get_db()
+    conn.execute(
+        "UPDATE captcha_attempts SET fail_count = 0, locked_until = NULL WHERE ip = ?",
+        (ip,),
     )
     conn.commit()
     conn.close()
@@ -350,7 +621,7 @@ def update_last_login(user_id: int) -> str:
     이전 값(=직전 로그인 시각)을 반환합니다. 화면에 "마지막 로그인: ..."으로
     보여줄 땐 이 반환값(직전 로그인)을 쓰면 됩니다.
     """
-    now = datetime.utcnow().isoformat(sep=" ", timespec="seconds")
+    now = datetime.now().astimezone().strftime("%Y-%m-%d %H:%M:%S")
     conn = get_db()
     previous = conn.execute(
         "SELECT last_login_at FROM users WHERE id = ?", (user_id,)

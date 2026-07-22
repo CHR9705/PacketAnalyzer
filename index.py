@@ -27,7 +27,7 @@ with st.sidebar:
 pages = [
     st.Page('webpages/pages/home.py', title='🏠 Home'),
     st.Page('webpages/pages/warning_list.py', title='⚠️ warnings'),
-    st.Page('webpages/pages/details.py', title='details'),
+    st.Page('webpages/pages/details.py', title='📋 Details'),
     st.Page('webpages/pages/messages.py', title='💬 메시지'),
 ]
 
@@ -35,6 +35,7 @@ pages = [
 if me["role"] != "admin":
     pages.append(st.Page('webpages/pages/role_request.py', title='🙋 권한 요청'))
 
+# admin 전용 페이지들 (배지에 대기 건수 표시)
 if me["role"] == "admin":
     signup_pending = get_unread_notification_count("signup_pending")
     role_pending = get_unread_notification_count("role_request")
@@ -45,12 +46,16 @@ if me["role"] == "admin":
         signup_label = f"🔔 가입 및 권한 승인 ({total_pending})"
         role_label = f"🛡️ 권한 요청 ({total_pending})"
     else:
-        signup_label = "가입 승인 관리"
+        signup_label = "🔔 가입 승인 관리"
         role_label = "권한 요청 관리"
 
     pages.append(st.Page('webpages/pages/approvals.py', title=signup_label))
 
-    pages.append(st.Page('webpages/pages/settings.py', title="settings"))
+    
+    security_pending = get_unread_notification_count("security_alert")
+    security_label = f"🚨 보안 알림 ({security_pending})" if security_pending else "보안 알림"
+    pages.append(st.Page('webpages/pages/security_alerts.py', title=security_label))
+    pages.append(st.Page('webpages/pages/settings.py', title='⚙️ Settings'))
     pages.append(st.Page('webpages/pages/audit_log.py', title='📜 감사 로그'))
 
 pg = st.navigation(pages)
