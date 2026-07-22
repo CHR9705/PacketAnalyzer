@@ -9,14 +9,17 @@ class BlockedConditionsRepo:
                 score FLOAT
             )
         ''')
+
+        self.db.cursor.execute('''
+        INSERT OR IGNORE INTO blocked_conditions (grade, score) 
+        VALUES ('Medium', 5)
+        ''')
         self.db.conn.commit()
 
-    def insert_conditions_table(self, grade, score):
+    def update_conditions_table(self, score,grade):
         self.db.cursor.execute('''
-            INSERT INTO blocked_conditions (grade, score)
-            VALUES (?, ?)
-            ON CONFLICT(grade) DO UPDATE SET score = excluded.score
-        ''', (grade, score))
+            update blocked_conditions SET score = ? WHERE grade = ?
+        ''', (score,grade))
         self.db.conn.commit()
     
     def get_conditions_table(self):
@@ -25,3 +28,4 @@ class BlockedConditionsRepo:
             FROM blocked_conditions
         """)
         return self.db.cursor.fetchone()
+            
