@@ -18,3 +18,10 @@ class BlockedConditionsRepo:
             ON CONFLICT(grade) DO UPDATE SET score = excluded.score
         ''', (grade, score))
         self.db.conn.commit()
+    
+    def get_conditions_table(self):
+        self.db.cursor.execute(f"""
+            SELECT grade, score
+            FROM blocked_conditions
+        """)
+        return self.db.cursor.fetchone()
