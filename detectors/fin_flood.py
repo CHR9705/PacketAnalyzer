@@ -36,11 +36,18 @@ def detect(packet:  PacketData, flow: Flow):
 
     inbound_fin = [p for p in flow.get_recent_packets_by_flag(seconds=10, flag="F")
         if p.dst_ip == MY_IP ] # MY_IP로 들어오는 것만 카운트
-    outbound_rst = [p for p in flow.get_recent_packets_by_flag(seconds=10, flag="R")
+        
+    outbound_fin = [p for p in flow.get_recent_packets_by_flag(seconds=10, flag="F")
+        if p.src_ip == MY_IP ] # MY_IP로 들어오는 것만 카운트
+     
+    syn =  flow.get_recent_packets_by_flag(seconds=10, flag="S")
+    outbound_rst = [p for p in flow.get_recent_packets_by_flag(seconds=10, flag="S")
         if p.src_ip == MY_IP] # 내가 보내는 RST
 
     fin_count = len(inbound_fin)
+    out_fin_count = len(outbound_fin)
     rst_count = len(outbound_rst)
+    syn_count = len(syn)
 
     if packet_count == 0:
         return (False, "")
@@ -50,8 +57,11 @@ def detect(packet:  PacketData, flow: Flow):
     
     fin_ratio = fin_count / packet_count
     rst_ratio = rst_count / fin_count
+    syn_ratio = syn_count / fin_count
+    out_fin_ratio = out_fin_count / fin_count
     
-    if packet_count >= 100 and fin_ratio >= 0.5 and rst_ratio >= 0.4:
+    # print(fin_ratio, rst_ratio, syn_ratio, out_fin_ratio)
+    if packet_count >= 100 and fin_ratio >= 0.5 and syn_ratio < 0.2 and out_fin_ratio < 0.2:
         print(datetime.fromtimestamp(packet.timestamp), packet.src_ip)
         print(f"총 패킷 중 fin 비율: {fin_ratio:.2f}")
         print ("FIN Flood 공격을 받고 있습니다.")

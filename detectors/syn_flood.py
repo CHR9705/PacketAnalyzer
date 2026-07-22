@@ -60,7 +60,7 @@ def detect(packet: PacketData, flow: Flow):
     ack_ratio = ack_count / syn_count
     fin_ratio = fin_count / syn_count
 
-    print(syn_ratio, ack_ratio ,fin_ratio)
+    # print(syn_ratio, ack_ratio ,fin_ratio)
     
     if packet_count >= 100 and syn_ratio >= 0.2 and ack_ratio < 1 and fin_ratio <= 0.5:
         print(datetime.fromtimestamp(packet.timestamp), packet.src_ip)
