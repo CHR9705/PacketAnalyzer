@@ -12,7 +12,7 @@ class BlockedConditionsRepo:
 
         self.db.cursor.execute('''
         INSERT OR IGNORE INTO blocked_conditions (grade, score) 
-        VALUES ('medium', 5)
+        VALUES ('Medium', 5)
         ''')
         self.db.conn.commit()
 
