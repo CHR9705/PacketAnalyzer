@@ -88,7 +88,7 @@ def remove_from_blacklist(ip: str):
         conn = get_shared_connection()
         # conn.execute("DELETE FROM black_list WHERE ip = ?", (ip,))
         # conn.execute("DELETE FROM blocked_packets WHERE src_ip = ?", (ip,))
-        conn.execute("UPDATE black_list SET accepted = 2  WHERE src_ip = ?", (ip,))
+        conn.execute("UPDATE black_list SET accepted = 2  WHERE ip = ?", (ip,))
         return True, None
     except Exception as e:
         return False, str(e)
@@ -98,7 +98,7 @@ def remove_from_whitelist(ip: str):
     try:
         conn = get_shared_connection()
         # conn.execute("DELETE FROM white_list WHERE ip = ?", (ip,))
-        conn.execute("UPDATE white_list SET accepted = 2  WHERE src_ip = ?", (ip,))
+        conn.execute("UPDATE white_list SET accepted = 2  WHERE ip = ?", (ip,))
         return True, None
     except Exception as e:
         return False, str(e)
