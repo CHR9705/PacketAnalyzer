@@ -9,11 +9,6 @@ class BlockedConditionsRepo:
                 score FLOAT
             )
         ''')
-
-        self.db.cursor.execute('''
-        INSERT OR IGNORE INTO blocked_conditions (grade, score) 
-        VALUES ('medium', 5)
-        ''')
         self.db.conn.commit()
 
     def insert_conditions_table(self, grade, score):

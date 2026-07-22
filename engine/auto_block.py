@@ -16,7 +16,7 @@ class AutoBlock:
         """
 
         condition = self.db.get_conditions_table()
-        condition = condition[0] if condition else 11.0
+        condition = float(condition[1]) if condition else 11.0
 
         return condition
 
