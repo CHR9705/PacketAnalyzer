@@ -10,39 +10,39 @@ DB_PATH = os.path.normpath(os.path.join(BASE_DIR, "..","..", "account.db"))
 SESSION_TTL_DAYS = 7        # 세션 토큰 유효 기간
 MAX_FAILED_ATTEMPTS = 5     # 이메일 기준 로그인 실패 허용 횟수
 LOCKOUT_MINUTES = 5         # 이메일 기준 잠금 지속 시간
-
+ 
 MAX_FAILED_ATTEMPTS_IP = 20   # IP 기준 로그인 실패 허용 횟수 (여러 계정 순회 공격 방지용, 공용 IP 고려해 더 느슨하게)
 LOCKOUT_MINUTES_IP = 15       # IP 기준 잠금 지속 시간
-
+ 
 MAX_SIGNUP_ATTEMPTS_IP = 5    # IP 기준 회원가입 시도 허용 횟수 (짧은 시간 내 계정 대량 생성/스팸 방지)
 SIGNUP_LOCKOUT_MINUTES_IP = 30  # IP 기준 회원가입 잠금 지속 시간
-
-MAX_CAPTCHA_FAILS_IP = 5    # IP 기준 캡차 실패 허용 횟수 (캡차 자체를 반복 시도하는 것 방지)
+ 
+MAX_CAPTCHA_FAILS_IP = 10     # IP 기준 캡차 실패 허용 횟수 (캡차 자체를 반복 시도하는 것 방지)
 CAPTCHA_LOCKOUT_MINUTES_IP = 10  # IP 기준 캡차 잠금 지속 시간
-
-
+ 
+ 
 def _hash_token(raw_token: str) -> str:
     # 세션 토큰은 이미 충분히 무작위(secrets.token_urlsafe)한 값이라
     # sha256 다이제스트만 저장. DB가 유출되어도 원본 토큰 복원 불가.
     return hashlib.sha256(raw_token.encode()).hexdigest()
-
-
+ 
+ 
 def get_db():
     """요청마다 새 DB 커넥션을 열어서 반환합니다."""
     conn = sqlite3.connect(DB_PATH)
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA foreign_keys = ON")
     return conn
-
-
+ 
+ 
 def _column_exists(conn, table, column):
     cols = [row["name"] for row in conn.execute(f"PRAGMA table_info({table})")]
     return column in cols
-
-
+ 
+ 
 def init_db():
     conn = get_db()
-
+ 
     # -------------------------------------------------
     # users
     # -------------------------------------------------
@@ -64,7 +64,7 @@ def init_db():
         conn.execute("ALTER TABLE users ADD COLUMN status TEXT NOT NULL DEFAULT 'approved'")
     if not _column_exists(conn, "users", "last_login_at"):
         conn.execute("ALTER TABLE users ADD COLUMN last_login_at TIMESTAMP")
-
+ 
     # -------------------------------------------------
     # sessions: 새로고침 시 로그인 유지용 토큰 (해시로만 저장 + 만료시각)
     # -------------------------------------------------
@@ -79,7 +79,7 @@ def init_db():
         )
         """
     )
-
+ 
     # -------------------------------------------------
     # login_attempts: 이메일 기준 brute-force 방지
     # -------------------------------------------------
@@ -92,7 +92,7 @@ def init_db():
         )
         """
     )
-
+ 
     # -------------------------------------------------
     # ip_login_attempts: IP 기준 brute-force 방지
     # (같은 이메일로는 5회 미만씩만 시도하며 여러 계정을 순회하는 공격 방지용)
@@ -106,7 +106,7 @@ def init_db():
         )
         """
     )
-
+ 
     # -------------------------------------------------
     # signup_attempts: IP 기준 회원가입 스팸/대량 생성 방지
     # -------------------------------------------------
@@ -119,7 +119,7 @@ def init_db():
         )
         """
     )
-
+ 
     # -------------------------------------------------
     # captcha_attempts: IP 기준 캡차 반복 실패 방지
     # (로그인/비밀번호와 무관하게 캡차 자체를 스크립트로 반복 시도하는 것 차단)
@@ -133,7 +133,7 @@ def init_db():
         )
         """
     )
-
+ 
     # -------------------------------------------------
     # notifications: 관리자용 알림 (가입 승인 요청, 권한 변경 요청 등)
     # -------------------------------------------------
@@ -149,7 +149,7 @@ def init_db():
         )
         """
     )
-
+ 
     # -------------------------------------------------
     # messages: 계정 간 인앱 채팅
     # -------------------------------------------------
@@ -165,7 +165,7 @@ def init_db():
         )
         """
     )
-
+ 
     # -------------------------------------------------
     # role_requests: 사용자가 관리자에게 보내는 권한(role) 변경 요청
     # -------------------------------------------------
@@ -184,7 +184,7 @@ def init_db():
         )
         """
     )
-
+ 
     # -------------------------------------------------
     # audit_log: 로그인/가입/승인/권한변경 등 주요 행동 전부 기록
     # -------------------------------------------------
@@ -201,26 +201,26 @@ def init_db():
         )
         """
     )
-
+ 
     conn.commit()
     conn.close()
-
+ 
     _ensure_default_admin()
     cleanup_expired_sessions()
-
-
+ 
+ 
 def _ensure_default_admin():
     """
     회원가입은 전부 'pending' 상태로 시작하고 admin이 승인해야 하므로,
     승인해줄 admin 계정이 최소 1명은 있어야 합니다.
     admin 계정이 하나도 없으면 기본 계정을 하나 만들어둡니다.
-
+ 
     !! 중요 !!: admin / admin 은 테스트 전용 계정입니다. 이메일 형식/비밀번호 정책 검증을
     거치지 않고 DB에 직접 심어둔 것이므로, 실사용 전에는 create_admin.py로 별도 admin
     계정을 만들고 이 계정은 지우세요.
     """
     from werkzeug.security import generate_password_hash
-
+ 
     conn = get_db()
     admin_exists = conn.execute(
         "SELECT id FROM users WHERE role = 'admin' LIMIT 1"
@@ -232,8 +232,8 @@ def _ensure_default_admin():
         )
         conn.commit()
     conn.close()
-
-
+ 
+ 
 # ---------------------------------------------------------
 # 세션 토큰 (새로고침 시 로그인 유지)
 # 원본 토큰은 URL(쿼리 파라미터)에만 존재, DB에는 해시값 + 만료시각만 저장
@@ -241,7 +241,7 @@ def _ensure_default_admin():
 def create_session(user_id: int) -> str:
     raw_token = secrets.token_urlsafe(32)
     expires_at = datetime.now().astimezone() + timedelta(days=SESSION_TTL_DAYS)
-
+ 
     conn = get_db()
     conn.execute(
         "INSERT INTO sessions (token_hash, user_id, expires_at) VALUES (?, ?, ?)",
@@ -250,12 +250,12 @@ def create_session(user_id: int) -> str:
     conn.commit()
     conn.close()
     return raw_token
-
-
+ 
+ 
 def get_user_by_session(raw_token: str):
     if not raw_token:
         return None
-
+ 
     conn = get_db()
     row = conn.execute(
         """
@@ -267,17 +267,17 @@ def get_user_by_session(raw_token: str):
         """,
         (_hash_token(raw_token),),
     ).fetchone()
-
+ 
     if row is None:
         conn.close()
         return None
-
+ 
     if datetime.fromisoformat(row["expires_at"]) < datetime.now().astimezone():
         conn.execute("DELETE FROM sessions WHERE token_hash = ?", (_hash_token(raw_token),))
         conn.commit()
         conn.close()
         return None
-
+ 
     conn.close()
     if row["status"] != "approved":
         return None
@@ -288,25 +288,23 @@ def get_user_by_session(raw_token: str):
         "status": row["status"],
         "last_login_at": row["last_login_at"],
     }
-
-
-def delete_session(raw_token: str):
-    if not raw_token:
-        return
+ 
+ 
+def delete_all_sessions_for_user(user_id: int):
     conn = get_db()
-    conn.execute("DELETE FROM sessions WHERE token_hash = ?", (_hash_token(raw_token),))
+    conn.execute("DELETE FROM sessions WHERE user_id = ?", (user_id,))
     conn.commit()
     conn.close()
-
-
+ 
+ 
 def cleanup_expired_sessions():
     """만료된 세션들을 DB에서 정리합니다. init_db()에서 자동 호출됩니다."""
     conn = get_db()
     conn.execute("DELETE FROM sessions WHERE expires_at < ?", (datetime.now().astimezone(),))
     conn.commit()
     conn.close()
-
-
+ 
+ 
 # ---------------------------------------------------------
 # 로그인 시도 제한 (brute-force 방지)
 # ---------------------------------------------------------
@@ -317,23 +315,23 @@ def is_locked_out(email: str):
         "SELECT locked_until FROM login_attempts WHERE email = ?", (email,)
     ).fetchone()
     conn.close()
-
+ 
     if row is None or row["locked_until"] is None:
         return False, 0
-
+ 
     locked_until = datetime.fromisoformat(row["locked_until"])
     remaining = (locked_until - datetime.now().astimezone()).total_seconds()
     if remaining <= 0:
         return False, 0
     return True, int(remaining)
-
-
+ 
+ 
 def record_failed_login(email: str):
     conn = get_db()
     row = conn.execute(
         "SELECT failed_count FROM login_attempts WHERE email = ?", (email,)
     ).fetchone()
-
+ 
     just_locked = False
     if row is None:
         conn.execute(
@@ -355,15 +353,15 @@ def record_failed_login(email: str):
             )
     conn.commit()
     conn.close()
-
+ 
     if just_locked:
         add_notification(
             "security_alert",
             f"'{email}' 계정이 로그인 {MAX_FAILED_ATTEMPTS}회 연속 실패로 {LOCKOUT_MINUTES}분간 잠겼습니다.",
         )
         log_action("account_locked", actor_email=email, detail=f"failed_attempts={MAX_FAILED_ATTEMPTS}")
-
-
+ 
+ 
 def record_successful_login(email: str):
     conn = get_db()
     conn.execute(
@@ -372,8 +370,8 @@ def record_successful_login(email: str):
     )
     conn.commit()
     conn.close()
-
-
+ 
+ 
 # ---------------------------------------------------------
 # 로그인 시도 제한 (IP 기준)
 # 같은 이메일로는 5회 미만씩만 시도하면서 여러 계정을 순회하는 공격을 막기 위한 보조 수단.
@@ -387,17 +385,17 @@ def is_ip_locked_out(ip: str):
         "SELECT locked_until FROM ip_login_attempts WHERE ip = ?", (ip,)
     ).fetchone()
     conn.close()
-
+ 
     if row is None or row["locked_until"] is None:
         return False, 0
-
+ 
     locked_until = datetime.fromisoformat(row["locked_until"])
     remaining = (locked_until - datetime.now().astimezone()).total_seconds()
     if remaining <= 0:
         return False, 0
     return True, int(remaining)
-
-
+ 
+ 
 def record_failed_login_ip(ip: str):
     if not ip:
         return
@@ -405,7 +403,7 @@ def record_failed_login_ip(ip: str):
     row = conn.execute(
         "SELECT failed_count FROM ip_login_attempts WHERE ip = ?", (ip,)
     ).fetchone()
-
+ 
     just_locked = False
     if row is None:
         conn.execute(
@@ -427,7 +425,7 @@ def record_failed_login_ip(ip: str):
             )
     conn.commit()
     conn.close()
-
+ 
     if just_locked:
         add_notification(
             "security_alert",
@@ -435,8 +433,8 @@ def record_failed_login_ip(ip: str):
             f"여러 계정을 순회하는 공격일 수 있습니다.",
         )
         log_action("ip_locked", detail=f"ip={ip}, failed_attempts={MAX_FAILED_ATTEMPTS_IP}")
-
-
+ 
+ 
 def record_successful_login_ip(ip: str):
     if not ip:
         return
@@ -447,8 +445,8 @@ def record_successful_login_ip(ip: str):
     )
     conn.commit()
     conn.close()
-
-
+ 
+ 
 # ---------------------------------------------------------
 # 회원가입 스팸/대량 생성 방지 (IP 기준)
 # ---------------------------------------------------------
@@ -460,17 +458,17 @@ def is_signup_locked_out(ip: str):
         "SELECT locked_until FROM signup_attempts WHERE ip = ?", (ip,)
     ).fetchone()
     conn.close()
-
+ 
     if row is None or row["locked_until"] is None:
         return False, 0
-
+ 
     locked_until = datetime.fromisoformat(row["locked_until"])
     remaining = (locked_until - datetime.now().astimezone()).total_seconds()
     if remaining <= 0:
         return False, 0
     return True, int(remaining)
-
-
+ 
+ 
 def record_signup_attempt(ip: str):
     """회원가입 시도(성공/실패 무관)가 있을 때마다 호출. 임계치 넘으면 해당 IP를 잠급니다."""
     if not ip:
@@ -479,7 +477,7 @@ def record_signup_attempt(ip: str):
     row = conn.execute(
         "SELECT attempt_count FROM signup_attempts WHERE ip = ?", (ip,)
     ).fetchone()
-
+ 
     just_locked = False
     if row is None:
         conn.execute(
@@ -501,7 +499,7 @@ def record_signup_attempt(ip: str):
             )
     conn.commit()
     conn.close()
-
+ 
     if just_locked:
         add_notification(
             "security_alert",
@@ -509,8 +507,8 @@ def record_signup_attempt(ip: str):
             f"{SIGNUP_LOCKOUT_MINUTES_IP}분간 차단되었습니다. 대량 계정 생성 공격일 수 있습니다.",
         )
         log_action("signup_spam_blocked", detail=f"ip={ip}, attempts={MAX_SIGNUP_ATTEMPTS_IP}")
-
-
+ 
+ 
 # ---------------------------------------------------------
 # captcha_attempts: IP 기준 캡차 반복 실패 방지
 # 로그인/회원가입 전 단계에서 캡차 자체를 스크립트로 반복 시도하는 것을 막습니다.
@@ -523,17 +521,17 @@ def is_captcha_locked_out(ip: str):
         "SELECT locked_until FROM captcha_attempts WHERE ip = ?", (ip,)
     ).fetchone()
     conn.close()
-
+ 
     if row is None or row["locked_until"] is None:
         return False, 0
-
+ 
     locked_until = datetime.fromisoformat(row["locked_until"])
     remaining = (locked_until - datetime.now().astimezone()).total_seconds()
     if remaining <= 0:
         return False, 0
     return True, int(remaining)
-
-
+ 
+ 
 def record_captcha_failure(ip: str):
     if not ip:
         return
@@ -541,7 +539,7 @@ def record_captcha_failure(ip: str):
     row = conn.execute(
         "SELECT fail_count FROM captcha_attempts WHERE ip = ?", (ip,)
     ).fetchone()
-
+ 
     just_locked = False
     if row is None:
         conn.execute(
@@ -563,7 +561,7 @@ def record_captcha_failure(ip: str):
             )
     conn.commit()
     conn.close()
-
+ 
     if just_locked:
         add_notification(
             "security_alert",
@@ -571,8 +569,8 @@ def record_captcha_failure(ip: str):
             f"{CAPTCHA_LOCKOUT_MINUTES_IP}분간 차단되었습니다. 자동화 스크립트일 수 있습니다.",
         )
         log_action("captcha_spam_blocked", detail=f"ip={ip}, fails={MAX_CAPTCHA_FAILS_IP}")
-
-
+ 
+ 
 def record_captcha_success(ip: str):
     if not ip:
         return
@@ -583,8 +581,8 @@ def record_captcha_success(ip: str):
     )
     conn.commit()
     conn.close()
-
-
+ 
+ 
 # ---------------------------------------------------------
 # 알림 (notifications)
 # ---------------------------------------------------------
@@ -596,22 +594,42 @@ def add_notification(ntype: str, message: str, related_user_id: int = None):
     )
     conn.commit()
     conn.close()
-
-
-def get_unread_notification_count(ntype: str = None):
+ 
+ 
+def get_unread_notification_count(ntype=None):
+    """
+    ntype: None(전체), 문자열 하나, 또는 문자열 리스트(여러 타입 합산) 모두 지원.
+    """
     conn = get_db()
-    if ntype:
-        count = conn.execute(
-            "SELECT COUNT(*) AS c FROM notifications WHERE is_read = 0 AND type = ?", (ntype,)
-        ).fetchone()["c"]
-    else:
+    if ntype is None:
         count = conn.execute(
             "SELECT COUNT(*) AS c FROM notifications WHERE is_read = 0"
         ).fetchone()["c"]
+    else:
+        types = [ntype] if isinstance(ntype, str) else list(ntype)
+        placeholders = ",".join("?" for _ in types)
+        count = conn.execute(
+            f"SELECT COUNT(*) AS c FROM notifications WHERE is_read = 0 AND type IN ({placeholders})",
+            types,
+        ).fetchone()["c"]
     conn.close()
     return count
-
-
+ 
+ 
+# ---------------------------------------------------------
+# 중복(동시) 로그인 감지
+# ---------------------------------------------------------
+def has_active_session(user_id: int) -> bool:
+    """해당 유저에게 아직 만료되지 않은 세션이 하나라도 있는지 확인합니다."""
+    conn = get_db()
+    row = conn.execute(
+        "SELECT COUNT(*) AS c FROM sessions WHERE user_id = ? AND expires_at > ?",
+        (user_id, datetime.now().astimezone()),
+    ).fetchone()
+    conn.close()
+    return row["c"] > 0
+ 
+ 
 # ---------------------------------------------------------
 # 마지막 로그인 시각
 # ---------------------------------------------------------
@@ -627,13 +645,13 @@ def update_last_login(user_id: int) -> str:
         "SELECT last_login_at FROM users WHERE id = ?", (user_id,)
     ).fetchone()
     previous_value = previous["last_login_at"] if previous else None
-
+ 
     conn.execute("UPDATE users SET last_login_at = ? WHERE id = ?", (now, user_id))
     conn.commit()
     conn.close()
     return previous_value
-
-
+ 
+ 
 # ---------------------------------------------------------
 # 권한(role) 변경 요청
 # ---------------------------------------------------------
@@ -646,7 +664,7 @@ def create_role_request(user_id: int, requested_role: str):
     if existing:
         conn.close()
         return False, "이미 처리 대기중인 권한 요청이 있습니다."
-
+ 
     conn.execute(
         "INSERT INTO role_requests (user_id, requested_role) VALUES (?, ?)",
         (user_id, requested_role),
@@ -654,7 +672,7 @@ def create_role_request(user_id: int, requested_role: str):
     conn.commit()
     user = conn.execute("SELECT email FROM users WHERE id = ?", (user_id,)).fetchone()
     conn.close()
-
+ 
     add_notification(
         "role_request",
         f"{user['email']} 님이 '{requested_role}' 권한을 요청했습니다.",
@@ -668,8 +686,8 @@ def create_role_request(user_id: int, requested_role: str):
         detail=f"requested_role={requested_role}",
     )
     return True, "권한 변경 요청을 관리자에게 전달했습니다."
-
-
+ 
+ 
 def get_my_role_requests(user_id: int, limit: int = 5):
     conn = get_db()
     rows = conn.execute(
@@ -678,8 +696,8 @@ def get_my_role_requests(user_id: int, limit: int = 5):
     ).fetchall()
     conn.close()
     return [dict(r) for r in rows]
-
-
+ 
+ 
 def get_pending_role_requests():
     conn = get_db()
     rows = conn.execute(
@@ -694,18 +712,18 @@ def get_pending_role_requests():
     ).fetchall()
     conn.close()
     return [dict(r) for r in rows]
-
-
+ 
+ 
 def resolve_role_request(request_id: int, approve: bool, admin_user_id: int, admin_email: str):
     conn = get_db()
     req = conn.execute("SELECT * FROM role_requests WHERE id = ?", (request_id,)).fetchone()
     if req is None:
         conn.close()
         return False, "요청을 찾을 수 없습니다."
-
+ 
     user = conn.execute("SELECT * FROM users WHERE id = ?", (req["user_id"],)).fetchone()
     new_status = "approved" if approve else "rejected"
-
+ 
     conn.execute(
         "UPDATE role_requests SET status = ?, resolved_at = CURRENT_TIMESTAMP, resolved_by = ? WHERE id = ?",
         (new_status, admin_user_id, request_id),
@@ -718,7 +736,7 @@ def resolve_role_request(request_id: int, approve: bool, admin_user_id: int, adm
     )
     conn.commit()
     conn.close()
-
+ 
     log_action(
         "role_request_resolved",
         actor_user_id=admin_user_id,
@@ -727,8 +745,8 @@ def resolve_role_request(request_id: int, approve: bool, admin_user_id: int, adm
         detail=f"request_id={request_id}, requested_role={req['requested_role']}, result={new_status}",
     )
     return True, f"{user['email']} 님의 요청을 {'승인' if approve else '거절'}했습니다."
-
-
+ 
+ 
 # ---------------------------------------------------------
 # 감사 로그 (Audit Log)
 # 로그인 성공/실패, 가입, 승인/거절, 권한 요청/승인/거절, 로그아웃 등을 기록
@@ -745,8 +763,8 @@ def log_action(action: str, actor_user_id: int = None, actor_email: str = None,
     )
     conn.commit()
     conn.close()
-
-
+ 
+ 
 def get_audit_log(limit: int = 300):
     conn = get_db()
     rows = conn.execute(

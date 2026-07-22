@@ -52,9 +52,10 @@ if me["role"] == "admin":
     pages.append(st.Page('webpages/pages/approvals.py', title=signup_label))
 
     
-    security_pending = get_unread_notification_count("security_alert")
+    security_pending = get_unread_notification_count(["security_alert", "concurrent_login_attempt"])
     security_label = f"🚨 보안 알림 ({security_pending})" if security_pending else "보안 알림"
     pages.append(st.Page('webpages/pages/security_alerts.py', title=security_label))
+    
     pages.append(st.Page('webpages/pages/settings.py', title='⚙️ Settings'))
     pages.append(st.Page('webpages/pages/audit_log.py', title='📜 감사 로그'))
 
