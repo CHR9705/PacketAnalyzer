@@ -40,8 +40,8 @@ class FirewallWorker():
 
         for rule_id, ip in self.db.get_rules("white_list"):
             try:
-                add_black(ip)
-                self.db.accept_rule("black_list", rule_id)
+                add_white(ip)
+                self.db.accept_rule("white_list", rule_id)
 
             except Exception as e:
                 print(f"[Firewall] add failed : {ip} ({e})")

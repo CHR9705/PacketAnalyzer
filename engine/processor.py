@@ -11,7 +11,7 @@ from .auto_block import AutoBlock
 from .detector_loader import load_detectors
 from .warning_manager import WarningManager
 from .db.dbmodule import DBModule
-from engine.iptables import _rule_exists
+from engine.iptables import _rule_exists, is_blocked
 
 
 
@@ -89,7 +89,7 @@ class PacketProcessor:
                 continue
 
             # 패킷 src ip가 차단이 되어있으면 blocked_packet에다 넣고 컨티뉴한다.
-            if _rule_exists(packet.src_ip, "DROP"):
+            if is_blocked(packet.src_ip):
                 self.db_module.insert_blocked_table(
                     packet.timestamp, packet.src_ip, packet.dst_ip, 
                     packet.src_port, packet.dst_port, packet.protocol, 
@@ -120,6 +120,11 @@ class PacketProcessor:
 
                 if result:
                     try: 
+                        # === 점수 계산하는 부분 ===
+                        calulator = ScoreCalculator(self.db_module)
+                        score = calulator.calc_score(name, packet)
+                        # === 점수 계산하는 부분 끝 ===
+
                         warning_manager.add_warning(
                             packet.timestamp,
                             packet.src_ip,
@@ -130,10 +135,6 @@ class PacketProcessor:
                         if _rule_exists(packet.src_ip, "ACCEPT"):
                             continue
 
-                        # === 점수 계산하는 부분 ===
-                        calulator = ScoreCalculator(self.db_module)
-                        score = calulator.calc_score(name, packet)
-                        # === 점수 계산하는 부분 끝 ===
 
                         # score대로 차단하는 코드
                         auto_blocker = AutoBlock(self.db_module)

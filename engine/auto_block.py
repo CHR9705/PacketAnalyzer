@@ -10,19 +10,21 @@ class AutoBlock:
         }
         self.db = db
 
-    def get_threshold(self):
+    def get_threshold(self) -> float:
         """
         어디서부터 자동차단할지 가져오는 함수
         """
-        # select 해서 가져오기
-        # 
-        return "Medium"
+
+        condition = self.db.get_conditions_table()
+        condition = float(condition[1]) if condition else 11.0
+
+        return condition
 
     def auto_block(self, score, src_ip):
         """
         자동 차단
         """
-        threshold = self.get_threshold().lower()
-        if score >= self.th_dict[threshold]:
+        threshold = self.get_threshold()
+        if score >= threshold:
             add_black(src_ip)
             self.db.insert_black_list(src_ip, True)
