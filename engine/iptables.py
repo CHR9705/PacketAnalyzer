@@ -114,8 +114,8 @@ def is_blocked(src_ip, chain="INPUT"):
             # 커스텀 체인으로 점프하는 경우 등은 별도 처리 필요
             continue
 
-    # 매치되는 규칙이 없으면 기본 정책 적용
-    return default_policy == "DROP"
+    # 매치되는 규칙이 없으면 일단 허용
+    return False
 
 
 def add_black(ip):
