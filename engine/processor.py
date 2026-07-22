@@ -89,7 +89,7 @@ class PacketProcessor:
                 continue
 
             # 패킷 src ip가 차단이 되어있으면 blocked_packet에다 넣고 컨티뉴한다.
-            if is_blocked(packet.src_ip):
+            if self.db_module.isit_blocked_fromdb(packet.src_ip):
                 self.db_module.insert_blocked_table(
                     packet.timestamp, packet.src_ip, packet.dst_ip, 
                     packet.src_port, packet.dst_port, packet.protocol, 
@@ -132,7 +132,8 @@ class PacketProcessor:
                             score
                         )
                         
-                        if _rule_exists(packet.src_ip, "ACCEPT"):
+                        # if _rule_exists(packet.src_ip, "ACCEPT"):
+                        if self.db_module.isit_white_fromdb(packet.src_ip, "ACCEPT"):
                             continue
 
 

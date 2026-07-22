@@ -59,6 +59,36 @@ class BlackWhiteRepo:
         """)
         return self.db.cursor.fetchall()
 
+    def isit_blocked_fromdb(self, ip):
+        self.db.cursor.execute(f"""
+            SELECT id, ip
+            FROM white_list
+            WHERE ip = ?
+        """, (ip, ))
+        wht = self.db.cursor.fetchall()
+
+        if wht : return False
+
+        self.db.cursor.execute(f"""
+            SELECT id, ip
+            FROM black_list
+            WHERE ip = ?
+        """, (ip, ))
+        blk = self.db.cursor.fetchall()
+
+        if blk : return True
+        else : return False
+
+    def isit_white_fromdb(self, ip):
+        self.db.cursor.execute(f"""
+            SELECT id, ip
+            FROM white_list
+            WHERE ip = ?
+        """, (ip, ))
+        wht = self.db.cursor.fetchall()
+
+        if wht : return True
+        else : return False
 
     def accept_rule(self, table: str, rule_id: int):
         self.db.cursor.execute(f"""
