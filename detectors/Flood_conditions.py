@@ -21,7 +21,7 @@ def flood_conditions(flow: Flow):
 
     pps = packet_count / recent_duration
 
-    if pps < 300:
+    if pps < 65:
         return None
 
     return {"packet_count": packet_count,"pps": pps,"duration": recent_duration}

@@ -159,7 +159,7 @@ class Flow:
             packet
             for packet in self.recent_packets
             if packet.protocol == "TCP"
-            and (packet.tcp_flags or "") == flag
+            and flag in (packet.tcp_flags or "") 
             and packet.timestamp >= self.last_seen - seconds
         ]
     
