@@ -51,7 +51,7 @@ st.markdown("""<h1 style="font-size:28px; margin:0;">🖥️ Real-Time Packet Mo
 ########################################################
 now = int(datetime.now().timestamp())
 start = now - 60
-one_day_ago = int((datetime.now() - timedelta(days=1)).timestamp())
+one_day_ago = now - 23 * 60 * 60
 
 packets = pd.read_sql_query(
     """
@@ -124,6 +124,77 @@ async def _generate_tts(text: str, voice: str) -> bytes:
             mp3_fp.write(chunk["data"])
     mp3_fp.seek(0)
     return mp3_fp.read()
+
+BUCKET_FREQ = "30min"
+
+def to_hour_bucket(epoch_series: pd.Series) -> pd.Series:
+    dt_kst = pd.to_datetime(epoch_series, unit="s", utc=True).dt.tz_convert(kst)
+    return dt_kst.dt.floor(BUCKET_FREQ)
+
+packets["hour_bucket"] = to_hour_bucket(packets["timestamp"])
+warnings["hour_bucket"] = to_hour_bucket(warnings["last_timestamp"])
+
+end_hour = pd.Timestamp(datetime.now(tz=kst)).floor(BUCKET_FREQ)
+start_hour = end_hour - pd.Timedelta(hours=22)
+hour_index = pd.date_range(start=start_hour, end=end_hour, freq=BUCKET_FREQ, tz=kst)
+hour_labels = [ts.strftime("%H:%M") for ts in hour_index]
+tick_positions = [lbl for lbl, ts in zip(hour_labels, hour_index) if ts.minute == 0]
+if hour_labels[0] not in tick_positions:
+    tick_positions.insert(0, hour_labels[0])
+if hour_labels[-1] not in tick_positions:
+    tick_positions.append(hour_labels[-1])
+
+ 
+def fill_missing_hours(df: pd.DataFrame, cat_col: str) -> pd.DataFrame:
+    """hour_bucket x 카테고리 조합 중 비어있는 시간대를 0으로 채움."""
+    if df.empty:
+        return df
+    categories = sorted(df[cat_col].dropna().unique())
+    full_index = pd.MultiIndex.from_product(
+        [hour_index, categories], names=["hour_bucket", cat_col]
+    )
+    return (
+        df.set_index(["hour_bucket", cat_col])
+        .reindex(full_index, fill_value=0)
+        .reset_index()
+        .assign(label=lambda d: d["hour_bucket"].dt.strftime("%H:%M"))
+    )
+ 
+ 
+def score_to_grade(score) -> str:
+    if pd.isna(score):
+        return "Unknown"
+    if score == 0:
+        return "None"
+    elif score < 4:
+        return "Low"
+    elif score < 7:
+        return "Medium"
+    elif score < 9:
+        return "High"
+    elif score <= 10:
+        return "Critical"
+    return "Unknown"
+ 
+ 
+warnings["grade"] = warnings["score"].apply(score_to_grade)
+ 
+GRADE_ORDER = ["None", "Low", "Medium", "High", "Critical"]
+GRADE_COLORS = {
+    "Critical": "#d32f2f",
+    "High": "#f57c00",
+    "Medium": "#fbc02d",
+    "Low": "#43a047",
+    "None": "#1976d2",
+}
+ 
+CHART_LAYOUT = dict(
+    height=280,
+    margin=dict(l=20, r=20, t=20, b=20),
+    paper_bgcolor="rgba(0,0,0,0)",
+    plot_bgcolor="rgba(0,0,0,0)",
+)
+ 
 
 # def check_new_warning():
 #     if warnings is None or warnings.empty:
@@ -413,6 +484,80 @@ with right:
                 unsafe_allow_html=True,
             )
 
+
+
+########################################################
+# 1) 시간별 공격유형 막대그래프
+########################################################
+st.markdown(get_h2("시간대별 공격유형"), unsafe_allow_html=True)
+ 
+if warnings.empty:
+    st.info("최근 24시간 내 경고 데이터가 없습니다.")
+else:
+    attack_hour = (
+        warnings.groupby(["hour_bucket", "attack_type"]).size().reset_index(name="count")
+    )
+    attack_hour = fill_missing_hours(attack_hour, "attack_type")
+ 
+    fig1 = px.bar(
+        attack_hour, x="label", y="count", color="attack_type", barmode="group",
+        category_orders={"label": hour_labels},
+        labels={"label": "시간", "count": "건수", "attack_type": "공격유형"},
+    )
+    fig1.update_xaxes(tickmode="array", tickvals=tick_positions)
+    fig1.update_layout(**CHART_LAYOUT)
+    st.plotly_chart(fig1, width="stretch")
+ 
+ 
+########################################################
+# 2) 시간별 프로토콜 유형 선그래프
+########################################################
+st.markdown(get_h2("시간대별 프로토콜 트래픽 추이"), unsafe_allow_html=True)
+ 
+if packets.empty:
+    st.info("최근 24시간 내 패킷 데이터가 없습니다.")
+else:
+    proto_hour = (
+        packets.groupby(["hour_bucket", "protocol"]).size().reset_index(name="count")
+    )
+    proto_hour = fill_missing_hours(proto_hour, "protocol")
+ 
+    fig2 = px.line(
+        proto_hour, x="label", y="count", color="protocol", markers=True,
+        category_orders={"label": hour_labels},
+        labels={"label": "시간", "count": "건수", "protocol": "프로토콜"},
+        color_discrete_map={"TCP": "#4A90E2", "UDP": "#2EC4A5", "OTHER": "#8B95A5"},
+    )
+    fig2.update_xaxes(tickmode="array", tickvals=tick_positions)
+    fig2.update_layout(**CHART_LAYOUT)
+    st.plotly_chart(fig2, width="stretch")
+ 
+ 
+########################################################
+# 3) 시간대별 Warning Grade 그래프
+########################################################
+st.markdown(get_h2("시간대별 Warning Grade"), unsafe_allow_html=True)
+ 
+if warnings.empty:
+    st.info("최근 24시간 내 경고 데이터가 없습니다.")
+else:
+    grade_hour = (
+        warnings.groupby(["hour_bucket", "grade"]).size().reset_index(name="count")
+    )
+    grade_hour = fill_missing_hours(grade_hour, "grade")
+    grade_hour["grade"] = pd.Categorical(grade_hour["grade"], categories=GRADE_ORDER, ordered=True)
+    grade_hour = grade_hour.sort_values(["hour_bucket", "grade"])
+ 
+    fig3 = px.bar(
+        grade_hour, x="label", y="count", color="grade", barmode="stack",
+        category_orders={"grade": GRADE_ORDER, "label": hour_labels},
+        color_discrete_map=GRADE_COLORS,
+        labels={"label": "시간", "count": "건수", "grade": "위험도"},
+    )
+    fig3.update_xaxes(tickmode="array", tickvals=tick_positions)
+    fig3.update_layout(**CHART_LAYOUT)
+    st.plotly_chart(fig3, width="stretch")
+
 left, right = st.columns(2)
 with left:
     st.markdown(get_h2("최다 IP"), unsafe_allow_html=True)
@@ -466,6 +611,7 @@ with voice_col2:
     ):
         st.session_state.alert_voice_gender = "male"
         st.rerun()
+
 
 # # ========================================================
 # # 🧪 [테스트 전용] 완벽히 연동되는 가상 공격 트리거 버튼
