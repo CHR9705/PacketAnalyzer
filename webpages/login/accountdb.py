@@ -207,8 +207,30 @@ def init_db():
  
     _ensure_default_admin()
     cleanup_expired_sessions()
+    clear_all_sessions_on_startup()
+
+
+_startup_session_cleanup_done = False
  
+
+def clear_all_sessions_on_startup():
+    global _startup_session_cleanup_done
+    if _startup_session_cleanup_done:
+        
+        return  # 이미 이번 프로세스 실행 중에 정리했음 -> 다시 안 함
  
+    conn = get_db()
+    deleted = conn.execute("SELECT COUNT(*) AS c FROM sessions").fetchone()["c"]
+    conn.execute("DELETE FROM sessions")
+    conn.commit()
+    conn.close()
+ 
+    _startup_session_cleanup_done = True
+   
+    if deleted:
+        log_action("startup_session_cleanup", detail=f"cleared {deleted} stale session(s)")
+ 
+
 def _ensure_default_admin():
     """
     회원가입은 전부 'pending' 상태로 시작하고 admin이 승인해야 하므로,
