@@ -753,13 +753,15 @@ def resolve_role_request(request_id: int, approve: bool, admin_user_id: int, adm
 # ---------------------------------------------------------
 def log_action(action: str, actor_user_id: int = None, actor_email: str = None,
                 target_user_id: int = None, detail: str = None):
+    now = datetime.now().astimezone().strftime("%Y-%m-%d %H:%M:%S")
+
     conn = get_db()
     conn.execute(
         """
-        INSERT INTO audit_log (actor_user_id, actor_email, action, target_user_id, detail)
-        VALUES (?, ?, ?, ?, ?)
+        INSERT INTO audit_log (actor_user_id, actor_email, action, target_user_id, detail, created_at)
+        VALUES (?, ?, ?, ?, ?, ?)
         """,
-        (actor_user_id, actor_email, action, target_user_id, detail),
+        (actor_user_id, actor_email, action, target_user_id, detail, now),
     )
     conn.commit()
     conn.close()
