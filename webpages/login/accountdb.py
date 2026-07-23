@@ -609,10 +609,12 @@ def record_captcha_success(ip: str):
 # 알림 (notifications)
 # ---------------------------------------------------------
 def add_notification(ntype: str, message: str, related_user_id: int = None):
+    now = datetime.now().astimezone().strftime("%Y-%m-%d %H:%M:%S")
+
     conn = get_db()
     conn.execute(
-        "INSERT INTO notifications (type, message, related_user_id) VALUES (?, ?, ?)",
-        (ntype, message, related_user_id),
+        "INSERT INTO notifications (type, message, related_user_id, created_at) VALUES (?, ?, ?, ?)",
+        (ntype, message, related_user_id, now),
     )
     conn.commit()
     conn.close()
